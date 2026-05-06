@@ -41,16 +41,25 @@ or destroy. Enable them only while actively using the tunnel.
 
 ## CI/CD decision
 
-Do **not** enable this path in the normal CI/CD pipeline. The OpenVPN gateway is
-a developer-access convenience for Codespaces, not a requirement for building,
-testing, or deploying the app. The existing CI Terraform job should keep
-validating the configuration with the feature flags at their default `false`
-values.
+The OpenVPN gateway is a developer-access convenience for Codespaces, not a
+requirement for building, testing, or deploying the app, so it remains disabled
+by default.
 
-If automation is needed later, make it a protected, manual infrastructure
-workflow for the dev environment only. It would need a securely stored trusted
-root certificate public value, but it still should not generate or distribute
-client VPN profiles; those remain per-user secrets.
+When you intentionally enable it, persist that desired state in GitHub Actions
+repository variables/secrets before running Terraform. A local-only apply with
+`TF_VAR_enable_dev_codespaces_openvpn=true` will create resources in the dev
+state, but the next infrastructure pipeline will use its default `false` values
+and plan to remove them. The workflow reads these repository settings for the
+dev environment:
+
+| Setting                                       | Type             | Purpose                                                        |
+| --------------------------------------------- | ---------------- | -------------------------------------------------------------- |
+| `ENABLE_DEV_CODESPACES_OPENVPN`               | Actions variable | Set to `true` to keep the VPN Gateway resources in CI/CD.      |
+| `ENABLE_DNS_PRIVATE_RESOLVER`                 | Actions variable | Set to `true` to keep the private resolver resources in CI/CD. |
+| `CODESPACES_VPN_ROOT_CERTIFICATE_PUBLIC_DATA` | Actions secret   | Public root certificate body required when the VPN is enabled. |
+
+The workflow still does not generate or distribute client VPN profiles; those
+remain per-user Codespaces secrets.
 
 ## Repo files involved
 
@@ -78,24 +87,42 @@ Run the provisioning steps from a trusted workstation, not from the Codespace.
 This creates git-ignored material under `codespaces-vpn-secrets/`. Treat the
 client key and profile like SSH private keys.
 
-### 2. Apply Terraform
+### 2. Persist the dev Terraform inputs for CI/CD
 
 ```bash
-cd infrastructure/terraform/environments/dev
+REPO="$(gh repo view --json nameWithOwner -q .nameWithOwner)"
 
-export TF_VAR_codespaces_vpn_root_certificate_public_data="$(cat ../../../codespaces-vpn-secrets/azure-vpn-root-public.txt)"
-export TF_VAR_enable_dev_codespaces_openvpn=true
-export TF_VAR_enable_dns_private_resolver=true
+gh variable set ENABLE_DEV_CODESPACES_OPENVPN \
+  --repo "$REPO" \
+  --body true
 
-terraform init
-terraform plan -out=tfplan
-terraform apply tfplan
+gh variable set ENABLE_DNS_PRIVATE_RESOLVER \
+  --repo "$REPO" \
+  --body true
+
+gh secret set CODESPACES_VPN_ROOT_CERTIFICATE_PUBLIC_DATA \
+  --repo "$REPO" \
+  --body "$(cat codespaces-vpn-secrets/azure-vpn-root-public.txt)"
+```
+
+### 3. Apply Terraform
+
+```bash
+gh workflow run infrastructure.yml \
+  --repo "$REPO" \
+  -f environment=dev \
+  -f action=apply
 ```
 
 The resolver flag is recommended because it avoids per-Codespace `/etc/hosts`
 entries and survives database private endpoint changes.
 
-### 3. Build and store the VPN profile
+If you also run `terraform apply` locally, use the same flag values that are
+stored in GitHub Actions. Do not create the VPN with local-only `TF_VAR_*`
+exports unless you also update the GitHub settings before the next
+infrastructure pipeline run.
+
+### 4. Build and store the VPN profile
 
 ```bash
 cd "$(git rev-parse --show-toplevel)"
@@ -110,7 +137,7 @@ gh secret set OPENVPNCONFIG \
 Use a Codespaces **user** secret, not a repository secret. The VPN profile embeds
 client private key material and must stay user-scoped.
 
-### 4. Optional: pre-populate database passwords
+### 5. Optional: pre-populate database passwords
 
 Set `DEV_DB_PASSWORDS_JSON` as another Codespaces user secret if you want the
 PostgreSQL VS Code extension to connect without prompting. Its value is a JSON
@@ -152,7 +179,7 @@ value.
 > stop/start keeps the old env var). After the rebuild the new password
 > is already filled in when VS Code attaches.
 
-### 5. Rebuild the Codespace and verify
+### 6. Rebuild the Codespace and verify
 
 Use **Codespaces: Rebuild Container** or create a fresh Codespace. A restart is
 not enough when Dockerfile or `runArgs` changed.

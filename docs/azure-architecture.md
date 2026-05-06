@@ -70,13 +70,13 @@ State is stored remotely in **Azure Storage** with Azure AD authentication.
 
 ### Bootstrap
 
-The Terraform state backend and Azure service principal are created by a one-time bootstrap script:
+The Terraform state backend and GitHub Actions OIDC app are created by a one-time bootstrap script:
 
 ```bash
 ./scripts/bootstrap-backend.sh --subscription <sub-id> --repo <owner/repo>
 ```
 
-This creates the `octoeshop-tfstate-rg` resource group, storage account, and blob container, and sets the `AZURE_CREDENTIALS` secret in GitHub.
+This creates the `octoeshop-tfstate-rg` resource group, storage account, and blob container, configures federated credentials for the current GitHub repository, and sets the `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID` secrets in GitHub.
 
 ### Provisioning
 
@@ -116,6 +116,6 @@ See [CI/CD Pipeline Documentation](cicd-pipeline.md) for full details.
 - **Secrets**: Stored in Azure Key Vault, automatically synced to GitHub Environment secrets after `terraform apply`, injected as Kubernetes secrets at deploy time. Production uses External Secrets Operator with workload identity for direct Key Vault → K8s sync.
 - **Network**: NSG rules + Kubernetes NetworkPolicies restrict traffic. Each environment uses isolated VNet CIDRs.
 - **Registry**: ACR credentials automatically synced to GitHub secrets
-- **Authentication**: Azure service principal with Role Based Access Control Administrator (not User Access Administrator). AKS uses workload identity for passwordless access to Key Vault.
+- **Authentication**: GitHub Actions authenticates to Azure with OIDC federated credentials and a service principal with Role Based Access Control Administrator (not User Access Administrator). AKS uses workload identity for passwordless access to Key Vault.
 - **Scanning**: Trivy container vulnerability scanning in CI pipeline
 - **Bootstrap**: One-time `bootstrap-backend.sh` script is the only manual step; all subsequent operations are automated via GitHub Actions

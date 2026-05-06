@@ -7,8 +7,9 @@ set -euo pipefail
 # This is the ONE manual step required to go from zero to fully automated.
 # It creates:
 #   1. Terraform state backend (Resource Group + Storage Account + Container)
-#   2. Azure Service Principal with required role assignments
-#   3. GitHub Actions secrets (AZURE_CREDENTIALS)
+#   2. Azure app registration / service principal with OIDC federation
+#   3. GitHub Actions secrets (AZURE_CLIENT_ID, AZURE_TENANT_ID,
+#      AZURE_SUBSCRIPTION_ID)
 #
 # Prerequisites:
 #   - Azure CLI (az) installed and logged in
@@ -24,6 +25,9 @@ RG_NAME="octoeshop-tfstate-rg"
 STORAGE_ACCOUNT="octoeshoptfstate"
 CONTAINER_NAME="tfstate"
 SP_NAME="octoeshop-github-actions"
+GITHUB_OIDC_ISSUER="https://token.actions.githubusercontent.com"
+GITHUB_OIDC_AUDIENCE="api://AzureADTokenExchange"
+ENVIRONMENTS=(dev staging production)
 
 SUBSCRIPTION=""
 REPO=""
@@ -35,6 +39,107 @@ usage() {
   echo "  --subscription  Azure subscription ID (default: current az account)"
   echo "  --repo          GitHub repository (default: detected from git remote)"
   exit 1
+}
+
+ensure_role_assignment() {
+  local assignee_object_id="$1"
+  local principal_type="$2"
+  local role="$3"
+  local scope="$4"
+  local label="$5"
+  local existing
+
+  existing=$(az role assignment list \
+    --assignee "$assignee_object_id" \
+    --scope "$scope" \
+    --query "[?roleDefinitionName=='$role'] | length(@)" \
+    -o tsv 2>/dev/null || true)
+
+  if [[ -z "$existing" || "$existing" == "0" ]]; then
+    az role assignment create \
+      --assignee-object-id "$assignee_object_id" \
+      --assignee-principal-type "$principal_type" \
+      --role "$role" \
+      --scope "$scope" \
+      --output none
+    echo "  ✅ RBAC: $label"
+  else
+    echo "  ✅ RBAC: $label (already assigned)"
+  fi
+}
+
+ensure_federated_credential() {
+  local name="$1"
+  local subject="$2"
+  local existing_subject
+  local existing_name_for_subject
+  local parameters
+
+  existing_subject=$(az ad app federated-credential list \
+    --id "$CLIENT_ID" \
+    --query "[?name=='$name'].subject | [0]" \
+    -o tsv 2>/dev/null || true)
+
+  if [[ "$existing_subject" == "$subject" ]]; then
+    echo "  ✅ OIDC: $name (already configured)"
+    return
+  fi
+
+  if [[ -n "$existing_subject" && "$existing_subject" != "None" ]]; then
+    az ad app federated-credential delete \
+      --id "$CLIENT_ID" \
+      --federated-credential-id "$name" \
+      --output none
+  fi
+
+  existing_name_for_subject=$(az ad app federated-credential list \
+    --id "$CLIENT_ID" \
+    --query "[?subject=='$subject'].name | [0]" \
+    -o tsv 2>/dev/null || true)
+
+  if [[ -n "$existing_name_for_subject" && "$existing_name_for_subject" != "None" ]]; then
+    echo "  ✅ OIDC: $name (already configured as $existing_name_for_subject)"
+    return
+  fi
+
+  parameters=$(jq -nc \
+    --arg name "$name" \
+    --arg issuer "$GITHUB_OIDC_ISSUER" \
+    --arg subject "$subject" \
+    --arg audience "$GITHUB_OIDC_AUDIENCE" \
+    '{name: $name, issuer: $issuer, subject: $subject, audiences: [$audience]}')
+
+  az ad app federated-credential create \
+    --id "$CLIENT_ID" \
+    --parameters "$parameters" \
+    --output none
+  echo "  ✅ OIDC: $name"
+}
+
+create_tfstate_container() {
+  local err_file
+  err_file=$(mktemp)
+
+  for attempt in {1..12}; do
+    if az storage container create \
+      --name "$CONTAINER_NAME" \
+      --account-name "$STORAGE_ACCOUNT" \
+      --auth-mode login \
+      --output none 2>"$err_file"; then
+      rm -f "$err_file"
+      echo "  ✅ Container: $CONTAINER_NAME"
+      return
+    fi
+
+    if [[ "$attempt" == "12" ]]; then
+      echo "❌ Could not create or access container '$CONTAINER_NAME' with Azure AD auth."
+      cat "$err_file"
+      rm -f "$err_file"
+      exit 1
+    fi
+
+    sleep 5
+  done
 }
 
 while [[ $# -gt 0 ]]; do
@@ -94,86 +199,129 @@ az storage account create \
   --sku Standard_LRS \
   --kind StorageV2 \
   --allow-blob-public-access false \
+  --allow-shared-key-access false \
+  --public-network-access Enabled \
+  --default-action Allow \
+  --bypass AzureServices \
   --min-tls-version TLS1_2 \
   --output none 2>/dev/null && echo "  ✅ Storage account: $STORAGE_ACCOUNT"
+
+az storage account update \
+  --name "$STORAGE_ACCOUNT" \
+  --resource-group "$RG_NAME" \
+  --allow-shared-key-access false \
+  --public-network-access Enabled \
+  --default-action Allow \
+  --bypass AzureServices \
+  --output none
+echo "  ✅ Storage account access: public endpoint enabled for GitHub-hosted Actions; auth restricted to Entra ID/RBAC"
+
+STORAGE_ID=$(az storage account show --name "$STORAGE_ACCOUNT" --resource-group "$RG_NAME" --query id -o tsv)
 
 # Assign Storage Blob Data Contributor to current user for AAD auth
 CURRENT_USER_OID=$(az ad signed-in-user show --query id -o tsv 2>/dev/null || true)
 if [[ -n "$CURRENT_USER_OID" ]]; then
-  STORAGE_ID=$(az storage account show --name "$STORAGE_ACCOUNT" --resource-group "$RG_NAME" --query id -o tsv)
-  az role assignment create \
-    --assignee-object-id "$CURRENT_USER_OID" \
-    --assignee-principal-type User \
-    --role "Storage Blob Data Contributor" \
-    --scope "$STORAGE_ID" \
-    --output none 2>/dev/null && echo "  ✅ RBAC: current user → Storage Blob Data Contributor"
+  ensure_role_assignment \
+    "$CURRENT_USER_OID" \
+    User \
+    "Storage Blob Data Contributor" \
+    "$STORAGE_ID" \
+    "current user → Storage Blob Data Contributor"
 fi
 
-az storage container create \
-  --name "$CONTAINER_NAME" \
-  --account-name "$STORAGE_ACCOUNT" \
-  --auth-mode login \
-  --output none 2>/dev/null && echo "  ✅ Container: $CONTAINER_NAME"
+create_tfstate_container
 
-# --- 2. Service Principal ---------------------------------------------------
+# --- 2. GitHub Actions OIDC app ---------------------------------------------
 
 echo ""
-echo "=== 2/3 Creating Service Principal ==="
+echo "=== 2/3 Configuring GitHub Actions OIDC ==="
 
-SP_EXISTS=$(az ad sp list --display-name "$SP_NAME" --query "[0].appId" -o tsv 2>/dev/null || true)
+CLIENT_ID=$(az ad app list --display-name "$SP_NAME" --query "[0].appId" -o tsv 2>/dev/null || true)
 
-if [[ -n "$SP_EXISTS" && "$SP_EXISTS" != "null" ]]; then
-  echo "  ℹ️  SP '$SP_NAME' already exists (appId: $SP_EXISTS). Resetting credentials..."
-  SP_JSON=$(az ad sp credential reset --id "$SP_EXISTS" --query "{clientId:appId, clientSecret:password, tenantId:tenant}" -o json 2>/dev/null)
-  CLIENT_ID=$(echo "$SP_JSON" | jq -r '.clientId')
-  CLIENT_SECRET=$(echo "$SP_JSON" | jq -r '.clientSecret')
+if [[ -n "$CLIENT_ID" && "$CLIENT_ID" != "null" ]]; then
+  echo "  ℹ️  App registration '$SP_NAME' already exists (clientId: $CLIENT_ID)"
 else
-  echo "  Creating new SP: $SP_NAME"
-  SP_JSON=$(az ad sp create-for-rbac \
-    --name "$SP_NAME" \
-    --role Contributor \
-    --scopes "/subscriptions/$SUBSCRIPTION" \
-    --query "{clientId:appId, clientSecret:password, tenantId:tenant}" \
-    -o json)
-  CLIENT_ID=$(echo "$SP_JSON" | jq -r '.clientId')
-  CLIENT_SECRET=$(echo "$SP_JSON" | jq -r '.clientSecret')
-  echo "  ✅ Service principal created: $CLIENT_ID"
+  echo "  Creating app registration: $SP_NAME"
+  CLIENT_ID=$(az ad app create --display-name "$SP_NAME" --query appId -o tsv)
+  echo "  ✅ App registration created: $CLIENT_ID"
 fi
 
-# Assign Storage Blob Data Contributor for Terraform state access
-STORAGE_ID=$(az storage account show --name "$STORAGE_ACCOUNT" --resource-group "$RG_NAME" --query id -o tsv)
-SP_OID=$(az ad sp show --id "$CLIENT_ID" --query id -o tsv)
-az role assignment create \
-  --assignee-object-id "$SP_OID" \
-  --assignee-principal-type ServicePrincipal \
-  --role "Storage Blob Data Contributor" \
-  --scope "$STORAGE_ID" \
-  --output none 2>/dev/null && echo "  ✅ RBAC: SP → Storage Blob Data Contributor"
+SP_OID=$(az ad sp show --id "$CLIENT_ID" --query id -o tsv 2>/dev/null || true)
+if [[ -z "$SP_OID" || "$SP_OID" == "null" ]]; then
+  az ad sp create --id "$CLIENT_ID" --output none
+  for attempt in {1..12}; do
+    SP_OID=$(az ad sp show --id "$CLIENT_ID" --query id -o tsv 2>/dev/null || true)
+    if [[ -n "$SP_OID" && "$SP_OID" != "null" ]]; then
+      break
+    fi
+    sleep 5
+  done
+fi
+
+if [[ -z "$SP_OID" || "$SP_OID" == "null" ]]; then
+  echo "❌ Could not resolve service principal for app registration '$SP_NAME'."
+  exit 1
+fi
+
+SUBSCRIPTION_SCOPE="/subscriptions/$SUBSCRIPTION"
+
+ensure_role_assignment \
+  "$SP_OID" \
+  ServicePrincipal \
+  Contributor \
+  "$SUBSCRIPTION_SCOPE" \
+  "SP → Contributor"
+
+ensure_role_assignment \
+  "$SP_OID" \
+  ServicePrincipal \
+  "Key Vault Secrets Officer" \
+  "$SUBSCRIPTION_SCOPE" \
+  "SP → Key Vault Secrets Officer"
+
+ensure_role_assignment \
+  "$SP_OID" \
+  ServicePrincipal \
+  "Storage Blob Data Contributor" \
+  "$SUBSCRIPTION_SCOPE" \
+  "SP → Storage Blob Data Contributor"
+
+ensure_role_assignment \
+  "$SP_OID" \
+  ServicePrincipal \
+  "Storage Blob Data Contributor" \
+  "$STORAGE_ID" \
+  "SP → Storage Blob Data Contributor"
 
 # Assign Role Based Access Control Administrator (scoped, with conditions)
 # This is narrower than User Access Administrator — it can only manage role
 # assignments, not role definitions, and can be further restricted with conditions.
-az role assignment create \
-  --assignee-object-id "$SP_OID" \
-  --assignee-principal-type ServicePrincipal \
-  --role "Role Based Access Control Administrator" \
-  --scope "/subscriptions/$SUBSCRIPTION" \
-  --output none 2>/dev/null && echo "  ✅ RBAC: SP → Role Based Access Control Administrator"
+ensure_role_assignment \
+  "$SP_OID" \
+  ServicePrincipal \
+  "Role Based Access Control Administrator" \
+  "$SUBSCRIPTION_SCOPE" \
+  "SP → Role Based Access Control Administrator"
+
+ensure_federated_credential "repo-main" "repo:${REPO}:ref:refs/heads/main"
+ensure_federated_credential "repo-pull-request" "repo:${REPO}:pull_request"
+for ENV in "${ENVIRONMENTS[@]}"; do
+  ensure_federated_credential "repo-env-${ENV}" "repo:${REPO}:environment:${ENV}"
+done
 
 # --- 3. GitHub Secrets -------------------------------------------------------
 
 echo ""
 echo "=== 3/3 Setting GitHub Secrets ==="
 
-AZURE_CREDS=$(jq -n \
-  --arg clientId "$CLIENT_ID" \
-  --arg clientSecret "$CLIENT_SECRET" \
-  --arg subscriptionId "$SUBSCRIPTION" \
-  --arg tenantId "$TENANT_ID" \
-  '{clientId: $clientId, clientSecret: $clientSecret, subscriptionId: $subscriptionId, tenantId: $tenantId}')
+printf '%s' "$CLIENT_ID" | gh secret set AZURE_CLIENT_ID --repo "$REPO"
+echo "  ✅ AZURE_CLIENT_ID"
 
-echo "$AZURE_CREDS" | gh secret set AZURE_CREDENTIALS --repo "$REPO"
-echo "  ✅ AZURE_CREDENTIALS"
+printf '%s' "$TENANT_ID" | gh secret set AZURE_TENANT_ID --repo "$REPO"
+echo "  ✅ AZURE_TENANT_ID"
+
+printf '%s' "$SUBSCRIPTION" | gh secret set AZURE_SUBSCRIPTION_ID --repo "$REPO"
+echo "  ✅ AZURE_SUBSCRIPTION_ID"
 
 echo ""
 echo "=== Bootstrap Complete ==="

@@ -64,7 +64,7 @@ npm run build
 ### From scratch (new Azure environment)
 
 ```bash
-# One-time bootstrap: creates Terraform state backend + Azure SP + GitHub secrets
+# One-time bootstrap: creates Terraform state backend + GitHub Actions OIDC secrets
 ./scripts/bootstrap-backend.sh
 
 # Then trigger infrastructure provisioning (includes cluster add-ons setup)
