@@ -18,6 +18,13 @@ FROM mcr.microsoft.com/devcontainers/typescript-node:${VARIANT}
 # DNS, and ln returns EBUSY). `openresolv` provides the same /sbin/resolvconf
 # interface that openvpn's `update-resolv-conf` script calls, but its
 # postinst leaves /etc/resolv.conf alone — see issue #40.
+#
+# `netcat-openbsd` (`nc`) and `postgresql-client` (`psql`, `pg_isready`) are
+# the canonical smoke-test tools called out in docs/dev-codespaces-openvpn.md
+# for verifying the tunnel reaches the postgres flexible servers; without
+# them on the image, copy-pasting the documented one-liners fails and the
+# operator has to apt-install them by hand inside every fresh codespace.
+# See issue #40 follow-up #2.
 RUN export DEBIAN_FRONTEND=noninteractive \
     && apt-get update \
     && apt-get -y install --no-install-recommends \
@@ -25,6 +32,8 @@ RUN export DEBIAN_FRONTEND=noninteractive \
         iproute2 \
         openresolv \
         ca-certificates \
+        netcat-openbsd \
+        postgresql-client \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 

@@ -79,3 +79,22 @@ output "product_db_fqdn" {
 output "order_db_fqdn" {
   value = module.postgresql_order.server_fqdn
 }
+
+# --------------------------------------------------------------------------- #
+# Azure DNS Private Resolver outputs
+#
+# Null while the resolver is disabled (enable_dns_private_resolver = false
+# and/or enable_dev_codespaces_openvpn = false). When enabled,
+# scripts/build-codespaces-openvpn-config.sh reads dns_resolver_inbound_ip
+# and injects it into the OpenVPN profile as a `dhcp-option DNS <ip>` line
+# so connected codespaces resolve VNet-private FQDNs through the resolver.
+# --------------------------------------------------------------------------- #
+
+output "dns_resolver_enabled" {
+  value = module.dns_private_resolver.enabled
+}
+
+output "dns_resolver_inbound_ip" {
+  description = "Private IP of the DNS Private Resolver inbound endpoint, or null when disabled. Consumed by scripts/build-codespaces-openvpn-config.sh."
+  value       = module.dns_private_resolver.inbound_endpoint_ip
+}

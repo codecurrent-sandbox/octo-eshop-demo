@@ -152,3 +152,29 @@ variable "codespaces_vpn_root_certificate_public_data" {
   type        = string
   default     = ""
 }
+
+# --------------------------------------------------------------------------- #
+# Azure DNS Private Resolver
+#
+# Provisions a Private DNS Resolver inbound endpoint inside the dev VNet so
+# that GitHub Codespaces connected via the codespaces OpenVPN P2S tunnel can
+# resolve VNet-private FQDNs (e.g. *.privatelink.postgres.database.azure.com)
+# without the per-rebuild /etc/hosts workaround. The resolver IP is pushed
+# to OpenVPN clients via scripts/build-codespaces-openvpn-config.sh, which
+# injects a dhcp-option DNS directive into the generated profile.
+#
+# Replaces "Future improvements: Azure DNS Private Resolver" from
+# docs/dev-codespaces-openvpn.md.
+# --------------------------------------------------------------------------- #
+
+variable "enable_dns_private_resolver" {
+  description = "When true (and enable_dev_codespaces_openvpn = true), provisions an Azure DNS Private Resolver inbound endpoint inside the dev VNet. Adds ~USD 108/month on top of the VPN gateway, so default false; flip on alongside the VPN flag when you want codespaces to resolve VNet-private FQDNs natively without the /etc/hosts workaround. A check block in main.tf rejects enable_dns_private_resolver = true while enable_dev_codespaces_openvpn = false."
+  type        = bool
+  default     = false
+}
+
+variable "dns_private_resolver_subnet_prefix" {
+  description = "CIDR for the dedicated DNS resolver inbound-endpoint subnet. Must be at least /28 and must not overlap with AKS, database, Redis, or GatewaySubnet ranges."
+  type        = list(string)
+  default     = ["10.0.4.0/28"]
+}

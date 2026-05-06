@@ -16,7 +16,11 @@
 #   4. Append `disable-dco` to work around an Azure P2S incompatibility with
 #      OpenVPN >= 2.6 Data Channel Offload mode (Microsoft's official Linux
 #      OpenVPN guidance, current at time of writing).
-#   5. Print the final profile to stdout.
+#   5. If the dns_private_resolver module is enabled (terraform output
+#      `dns_resolver_inbound_ip` is non-null), inject a DNS push directive
+#      pointing at the resolver's inbound endpoint and wire OpenVPN's
+#      update-resolv-conf hook so resolved DNS lasts only for the tunnel.
+#   6. Print the final profile to stdout.
 #
 # Pre-requisites:
 #   * `az` (Azure CLI) logged in to the dev subscription.
@@ -144,6 +148,40 @@ fi
 # not negotiate Data Channel Offload, which currently does not interoperate
 # with Azure VPN Gateway.
 FINAL_OVPN="${FINAL_OVPN}"$'\n'"disable-dco"$'\n'
+
+# Optional: inject the Azure DNS Private Resolver IP (when the resolver
+# module is enabled in environments/dev). Without this, codespaces fall
+# back to the /etc/hosts workaround documented in
+# docs/dev-codespaces-openvpn.md to resolve VNet-private FQDNs.
+#
+# `terraform output -raw` prints the literal string "null" when an output
+# resolves to null, so treat both empty and "null" as "resolver disabled".
+DNS_RESOLVER_IP="$(terraform output -raw dns_resolver_inbound_ip 2>/dev/null || true)"
+if [[ -n "${DNS_RESOLVER_IP}" && "${DNS_RESOLVER_IP}" != "null" ]]; then
+    echo "🌐 DNS Private Resolver IP: ${DNS_RESOLVER_IP}" >&2
+
+    # Strip any DNS push directives Azure already shipped in the template
+    # (current Azure profiles include none, but a future change must not
+    # silently end up *first* in resolv.conf and shadow our resolver - the
+    # libc resolver does not retry on NXDOMAIN, so a stale 168.63.129.16
+    # ahead of our resolver would break private-zone resolution outright).
+    FINAL_OVPN="$(printf '%s' "${FINAL_OVPN}" \
+        | sed -E '/^[[:space:]]*dhcp-option[[:space:]]+DNS[[:space:]]+/d')"
+
+    # script-security 2 is required for OpenVPN to execute the bundled
+    # /etc/openvpn/update-resolv-conf hook, which uses /sbin/resolvconf
+    # (provided by the openresolv package in the devcontainer image) to
+    # write our resolver into /etc/resolv.conf for the duration of the
+    # tunnel. The down hook reverts it. install-dev-tools.sh validates
+    # both binaries exist before starting the daemon.
+    FINAL_OVPN="${FINAL_OVPN}"$'\n'"# Pushed by scripts/build-codespaces-openvpn-config.sh (DNS Private Resolver enabled)."$'\n'
+    FINAL_OVPN="${FINAL_OVPN}"$'\n'"dhcp-option DNS ${DNS_RESOLVER_IP}"$'\n'
+    FINAL_OVPN="${FINAL_OVPN}script-security 2"$'\n'
+    FINAL_OVPN="${FINAL_OVPN}up /etc/openvpn/update-resolv-conf"$'\n'
+    FINAL_OVPN="${FINAL_OVPN}down /etc/openvpn/update-resolv-conf"$'\n'
+else
+    echo "🌐 DNS Private Resolver: not enabled (set enable_dns_private_resolver = true to use)" >&2
+fi
 
 printf '%s' "${FINAL_OVPN}"
 

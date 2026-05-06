@@ -148,9 +148,18 @@ cd infrastructure/terraform/environments/dev
 export TF_VAR_codespaces_vpn_root_certificate_public_data="$(cat ../../../codespaces-vpn-secrets/azure-vpn-root-public.txt)"
 export TF_VAR_enable_dev_codespaces_openvpn=true
 
+# Optional but strongly recommended: also stand up the Azure DNS Private
+# Resolver inbound endpoint so codespaces can resolve VNet-private FQDNs
+# (`*.privatelink.postgres.database.azure.com`, etc.) without the
+# /etc/hosts workaround in step 6 below. Adds ~USD 108/month on top of
+# the gateway. The resolver flag is rejected unless the VPN flag is also
+# true (a `check` block in main.tf enforces this at plan time).
+export TF_VAR_enable_dns_private_resolver=true
+
 terraform init                # or `terraform init -reconfigure` if backend changes
-terraform plan -out=tfplan    # confirm: GatewaySubnet, public IP, gateway, NSG rule
-terraform apply tfplan        # 30-45 minutes
+terraform plan -out=tfplan    # confirm: GatewaySubnet, public IP, gateway, NSG rule,
+                              # plus dns-inbound-subnet + DNS resolver + inbound endpoint
+terraform apply tfplan        # 30-45 minutes (gateway dominates; resolver adds ~5 min)
 ```
 
 When apply finishes you should have:
@@ -161,6 +170,10 @@ $ terraform output codespaces_vpn_gateway_name
 
 $ terraform output codespaces_vpn_gateway_public_ip
 "<the gateway's public IP>"
+
+# Only present when enable_dns_private_resolver = true:
+$ terraform output dns_resolver_inbound_ip
+"10.0.4.4"
 ```
 
 ### 3. Build the OpenVPN profile
@@ -232,53 +245,95 @@ sudo ip addr show tun0
 # 2. Routes pointing into the dev VNet?
 ip route | grep 10.0
 
-# 3. Reach a private dev resource. Use the gateway-pushed DNS for resolve;
-#    otherwise resolve via the workaround below.
-nslookup "$(terraform -chdir=infrastructure/terraform/environments/dev output -raw user_db_fqdn)" 168.63.129.16 || true
+# 3. DNS smoke test (only meaningful with enable_dns_private_resolver = true).
+#    /etc/resolv.conf should now point at the resolver's inbound endpoint IP
+#    (10.0.4.x), and a private FQDN should resolve to a 10.0.2.x address.
+cat /etc/resolv.conf
+nslookup "$(terraform -chdir=infrastructure/terraform/environments/dev output -raw user_db_fqdn)"
 
 # 4. TCP probe — the simplest "is the route alive?" test. The PostgreSQL
-#    Flexible Server's private IP is in 10.0.2.0/24.
-nc -vz <user_db_private_ip> 5432
+#    Flexible Server's private IP is in 10.0.2.0/24. Both `nc` and
+#    `pg_isready` ship in the devcontainer image.
+USER_DB_FQDN="$(terraform -chdir=infrastructure/terraform/environments/dev output -raw user_db_fqdn)"
+nc -vz "$USER_DB_FQDN" 5432
+pg_isready -h "$USER_DB_FQDN" -p 5432
 ```
 
-### 6. Connect with `psql` (DNS workaround)
+### 6. Connect with `psql`
 
-P2S clients sit outside the VNet, so Azure's link-local DNS
-(`168.63.129.16`) does not resolve `*.postgres.database.azure.com` for
-them. The simplest no-extra-cost test is to use the private IP directly:
+How DNS resolves inside the codespace depends on whether the **Azure DNS
+Private Resolver** is enabled (step 2):
+
+- **Resolver enabled (recommended).** The build script injected
+  `dhcp-option DNS <resolver-ip>` into the OpenVPN profile.
+  `update-resolv-conf` rewrites `/etc/resolv.conf` for the duration of
+  the tunnel, and `*.privatelink.postgres.database.azure.com` resolves
+  natively via the VNet's linked private DNS zones. Skip ahead to the
+  `psql` snippet below — no `/etc/hosts` editing needed.
+- **Resolver disabled.** P2S clients sit outside the VNet, so Azure's
+  link-local DNS (`168.63.129.16`) does not resolve
+  `*.postgres.database.azure.com` for them. Use the `/etc/hosts`
+  workaround in **6a** as a one-shot fallback.
+
+> **Where each command runs.** Anything that uses `az` or `terraform`
+> against Azure runs on the **operator's laptop** (operators have
+> Reader/Contributor RBAC; codespaces do not, by design). Anything that
+> uses `psql`, `nc`, or `nslookup` against private IPs runs **inside the
+> codespace** (which has the tunnel). The split is called out per block
+> below.
+
+**Pull the FQDN you'll connect to (operator laptop _or_ codespace — both
+work, since `terraform output` only reads state):**
 
 ```bash
-# Pull the FQDN the connection string expects
 USER_DB_FQDN="$(terraform -chdir=infrastructure/terraform/environments/dev \
     output -raw user_db_fqdn)"
-USER_DB_NAME="$(basename "$USER_DB_FQDN" .postgres.database.azure.com)"
-DNS_ZONE="$(terraform -chdir=infrastructure/terraform/environments/dev \
-    output -raw postgresql_private_dns_zone_name)"
-RG="$(terraform -chdir=infrastructure/terraform/environments/dev \
-    output -raw resource_group_name)"
+```
 
-# Look up the private IP via the private DNS zone (operator-side; az has
-# Reader access, no VPN needed)
-USER_DB_IP="$(az network private-dns record-set a show \
-    --resource-group "$RG" \
-    --zone-name "$DNS_ZONE" \
-    --name "$USER_DB_NAME" \
-    --query 'aRecords[0].ipv4Address' -o tsv)"
+**Connect with `psql` (codespace, resolver enabled):**
 
-# Map the FQDN to the IP inside the codespace
-echo "$USER_DB_IP $USER_DB_FQDN" | sudo tee -a /etc/hosts
-
-# Connect (sslmode=require skips hostname-vs-IP verification)
+```bash
+# DNS resolves through the Azure DNS Private Resolver because the OpenVPN
+# profile pushed it as the codespace's only resolver. No /etc/hosts entries.
 PGPASSWORD="$(az keyvault secret show \
     --vault-name "$(terraform -chdir=infrastructure/terraform/environments/dev output -raw key_vault_name)" \
     --name user-db-connection-string -o tsv --query value | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')" \
 psql "host=$USER_DB_FQDN port=5432 dbname=userdb user=pgadmin sslmode=require"
 ```
 
-For ongoing use, deploy an Azure DNS Private Resolver inbound endpoint and
-push its IP via the gateway's `vpn_client_configuration.dns_servers`
-attribute. That is intentionally **out of scope** for this branch to keep
-cost down — see [Future improvements](#future-improvements).
+#### 6a. `/etc/hosts` fallback (resolver disabled)
+
+Run from the **operator laptop** to look up the private IPs (no VPN needed
+for the lookup itself):
+
+```bash
+USER_DB_NAME="$(basename "$USER_DB_FQDN" .postgres.database.azure.com)"
+DNS_ZONE="$(terraform -chdir=infrastructure/terraform/environments/dev \
+    output -raw postgresql_private_dns_zone_name)"
+RG="$(terraform -chdir=infrastructure/terraform/environments/dev \
+    output -raw resource_group_name)"
+
+USER_DB_IP="$(az network private-dns record-set a show \
+    --resource-group "$RG" \
+    --zone-name "$DNS_ZONE" \
+    --name "$USER_DB_NAME" \
+    --query 'aRecords[0].ipv4Address' -o tsv)"
+
+echo "USER_DB_IP=$USER_DB_IP"
+```
+
+Then **inside the codespace**:
+
+```bash
+echo "$USER_DB_IP $USER_DB_FQDN" | sudo tee -a /etc/hosts
+PGPASSWORD="$(az keyvault secret show \
+    --vault-name "$(terraform -chdir=infrastructure/terraform/environments/dev output -raw key_vault_name)" \
+    --name user-db-connection-string -o tsv --query value | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')" \
+psql "host=$USER_DB_FQDN port=5432 dbname=userdb user=pgadmin sslmode=require"
+```
+
+The `/etc/hosts` line is wiped on every codespace rebuild — the resolver
+flow is the durable answer.
 
 ### 6b. Connect with the official Microsoft PostgreSQL VS Code extension
 
@@ -302,7 +357,7 @@ lifetime.
 **Two prerequisites for the connect to succeed:**
 
 1. **The OpenVPN tunnel must be up** (see [step 5](#5-rebuild-the-codespace-and-verify)) — without it the connections will time out at the TCP layer because tcp/5432 to the database subnet is only allowed from the VPN client pool.
-2. **The FQDN must resolve to the private IP.** P2S clients don't get private DNS pushed (see [step 6 above](#6-connect-with-psql-dns-workaround)). Use the same `/etc/hosts` workaround as for `psql`: add a line like `10.0.2.X octoeshop-dev-user-db-qyqw.postgres.database.azure.com` for each of the three FQDNs (look up the IPs once with `az network private-dns record-set a show -g octoeshop-dev-rg -z privatelink.postgres.database.azure.com -n <server-shortname> --query 'aRecords[0].ipv4Address' -o tsv` from your laptop, since `az` doesn't need the tunnel to read DNS records).
+2. **The FQDN must resolve to the private IP.** With `enable_dns_private_resolver = true` (see [step 2](#2-apply-terraform-with-the-gateway-enabled)) the Azure DNS Private Resolver handles this automatically — no per-codespace setup. With the resolver disabled, fall back to the `/etc/hosts` workaround in [step 6a](#6a-etchosts-fallback-resolver-disabled): add a line per FQDN (`10.0.2.X octoeshop-dev-{user,product,order}-db-qyqw.postgres.database.azure.com`). The `/etc/hosts` entries are wiped on rebuild.
 
 Where to get the password: any of the three `*-db-connection-string` secrets in Key Vault `octoeshopdevswkvhpxt5`, or `terraform output` in the dev environment.
 
@@ -362,16 +417,16 @@ different solution: GitHub-managed
 [hosted-compute private networking](https://docs.github.com/en/enterprise-cloud@latest/admin/configuring-settings/configuring-private-networking-for-hosted-compute-products/about-azure-private-networking-for-github-hosted-runners-in-your-enterprise)
 via `GitHub.Network/networkSettings`.
 
-| Dimension             | OpenVPN P2S (this branch)                                                                                 | Hosted-compute private networking (sibling)                                                                        |
-| --------------------- | --------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
-| Today's status        | Works in any GitHub plan that allows `runArgs` capability flags.                                          | Works for hosted Actions runners now; **Codespaces** integration is a private preview not enabled on this account. |
-| Egress public IP      | A new Azure public IP attached to the VPN Gateway.                                                        | None — traffic egresses to Azure across GitHub-managed peering.                                                    |
-| Codespace changes     | Custom Dockerfile, `--cap-add=NET_ADMIN`, `/dev/net/tun`, openvpn client.                                 | None inside the Codespace; networking happens before user code runs.                                               |
-| Recurring Azure cost  | ~USD 140 / month for VpnGw1AZ (cheapest SKU that supports OpenVPN; Azure deprecated non-AZ SKUs in 2026). | Just the delegated subnet + NSG; no gateway.                                                                       |
-| Provisioning time     | 30–45 min apply, 30–45 min destroy.                                                                       | Minutes.                                                                                                           |
-| Auth                  | Self-signed root + per-user client cert.                                                                  | Managed by GitHub via the org/enterprise network configuration.                                                    |
-| DNS for private FQDNs | Not solved by default — operator side-loads `/etc/hosts` or deploys an Azure DNS Resolver.                | Same — needs Azure-side DNS strategy.                                                                              |
-| Client OS support     | Anywhere with OpenVPN ≥ 2.4 (with `disable-dco` for ≥ 2.6).                                               | Only GitHub-hosted compute.                                                                                        |
+| Dimension             | OpenVPN P2S (this branch)                                                                                                                                                                                                       | Hosted-compute private networking (sibling)                                                                        |
+| --------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| Today's status        | Works in any GitHub plan that allows `runArgs` capability flags.                                                                                                                                                                | Works for hosted Actions runners now; **Codespaces** integration is a private preview not enabled on this account. |
+| Egress public IP      | A new Azure public IP attached to the VPN Gateway.                                                                                                                                                                              | None — traffic egresses to Azure across GitHub-managed peering.                                                    |
+| Codespace changes     | Custom Dockerfile, `--cap-add=NET_ADMIN`, `/dev/net/tun`, openvpn client.                                                                                                                                                       | None inside the Codespace; networking happens before user code runs.                                               |
+| Recurring Azure cost  | ~USD 140 / month for VpnGw1AZ (cheapest SKU that supports OpenVPN; Azure deprecated non-AZ SKUs in 2026).                                                                                                                       | Just the delegated subnet + NSG; no gateway.                                                                       |
+| Provisioning time     | 30–45 min apply, 30–45 min destroy.                                                                                                                                                                                             | Minutes.                                                                                                           |
+| Auth                  | Self-signed root + per-user client cert.                                                                                                                                                                                        | Managed by GitHub via the org/enterprise network configuration.                                                    |
+| DNS for private FQDNs | Optional `enable_dns_private_resolver` flag stands up an Azure DNS Private Resolver inbound endpoint and pushes it to OpenVPN clients via `dhcp-option DNS`. Adds ~USD 108/month. Without it, operator side-loads `/etc/hosts`. | Same — needs Azure-side DNS strategy.                                                                              |
+| Client OS support     | Anywhere with OpenVPN ≥ 2.4 (with `disable-dco` for ≥ 2.6).                                                                                                                                                                     | Only GitHub-hosted compute.                                                                                        |
 
 Pick the OpenVPN approach when you need a tunnel **today** and are willing
 to pay the gateway cost. Pick hosted-compute private networking when your
@@ -381,14 +436,15 @@ account is in the Codespaces preview and you want zero per-codespace setup.
 
 ## Troubleshooting
 
-| Symptom                                                                                  | Likely cause                                                                                                                                                         | Fix                                                                                                                                                                        |
-| ---------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `❌ /dev/net/tun is not present in the container.`                                       | Codespace was restarted but not rebuilt after `runArgs` change.                                                                                                      | Run **Codespaces: Rebuild Container** or open a new Codespace.                                                                                                             |
-| `TUNSETIFF: Operation not permitted`                                                     | NET_ADMIN capability not granted.                                                                                                                                    | Confirm `runArgs` includes `--cap-add=NET_ADMIN` and rebuild. Verify with `capsh --print`.                                                                                 |
-| `OpenVPN ROUTE: failed to parse/resolve`, or tunnel up but `nc` to private IP times out. | Stale routes from a previous run.                                                                                                                                    | `sudo pkill openvpn` then re-run `bash .devcontainer/postcreate/install-dev-tools.sh`.                                                                                     |
-| `OpenVPN data channel offload not available with kernel: …`                              | Running OpenVPN ≥ 2.6 without `disable-dco`. The `build-codespaces-openvpn-config.sh` script appends it for you, so this only appears if you hand-built the profile. | Append `disable-dco` to your `vpnconfig.ovpn` and update the secret.                                                                                                       |
-| `Initialization Sequence Completed` never logged.                                        | Cert mismatch (client cert not signed by registered root) or the gateway is still provisioning.                                                                      | `terraform output codespaces_vpn_gateway_name` and check `az network vnet-gateway show -g <RG> -n <name> --query provisioningState`. Re-run cert + config build if needed. |
-| `psql` fails with `server certificate verification failed`.                              | Connecting to the FQDN with `sslmode=verify-full` while bypassing public DNS via `/etc/hosts`.                                                                       | Use `sslmode=require`, or deploy a DNS resolver and use the FQDN through it.                                                                                               |
+| Symptom                                                                                                | Likely cause                                                                                                                                                         | Fix                                                                                                                                                                                                                                                    |
+| ------------------------------------------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `❌ /dev/net/tun is not present in the container.`                                                     | Codespace was restarted but not rebuilt after `runArgs` change.                                                                                                      | Run **Codespaces: Rebuild Container** or open a new Codespace.                                                                                                                                                                                         |
+| `TUNSETIFF: Operation not permitted`                                                                   | NET_ADMIN capability not granted.                                                                                                                                    | Confirm `runArgs` includes `--cap-add=NET_ADMIN` and rebuild. Verify with `capsh --print`.                                                                                                                                                             |
+| `OpenVPN ROUTE: failed to parse/resolve`, or tunnel up but `nc` to private IP times out.               | Stale routes from a previous run.                                                                                                                                    | `sudo pkill openvpn` then re-run `bash .devcontainer/postcreate/install-dev-tools.sh`.                                                                                                                                                                 |
+| `OpenVPN data channel offload not available with kernel: …`                                            | Running OpenVPN ≥ 2.6 without `disable-dco`. The `build-codespaces-openvpn-config.sh` script appends it for you, so this only appears if you hand-built the profile. | Append `disable-dco` to your `vpnconfig.ovpn` and update the secret.                                                                                                                                                                                   |
+| `Initialization Sequence Completed` never logged.                                                      | Cert mismatch (client cert not signed by registered root) or the gateway is still provisioning.                                                                      | `terraform output codespaces_vpn_gateway_name` and check `az network vnet-gateway show -g <RG> -n <name> --query provisioningState`. Re-run cert + config build if needed.                                                                             |
+| `psql` fails with `server certificate verification failed`.                                            | Connecting to the FQDN with `sslmode=verify-full` while bypassing public DNS via `/etc/hosts`.                                                                       | Use `sslmode=require`, or enable `enable_dns_private_resolver = true` and reach the FQDN through the VNet resolver.                                                                                                                                    |
+| `psql`/`nc` fails with `Name or service not known` for a `*-db-qyqw.postgres.database.azure.com` FQDN. | `enable_dns_private_resolver = false` (or the OpenVPN profile was generated before the resolver was applied) — the codespace has no resolver for the private zone.   | Either (a) set `enable_dns_private_resolver = true`, re-run `scripts/build-codespaces-openvpn-config.sh`, update the `OPENVPNCONFIG` secret, and rebuild the codespace, or (b) use the [/etc/hosts fallback](#6a-etchosts-fallback-resolver-disabled). |
 
 The OpenVPN log lives at `.ignore/openvpn.log`. The PID lives at
 `.ignore/openvpn.pid`. Stop the tunnel with
@@ -396,10 +452,10 @@ The OpenVPN log lives at `.ignore/openvpn.log`. The PID lives at
 
 ## Future improvements
 
-- **Azure DNS Private Resolver** (inbound endpoint) so `*.postgres.database.azure.com` resolves end-to-end inside Codespaces without `/etc/hosts` workarounds. Adds another monthly cost.
 - **Per-user client certs in a Key Vault.** Today the operator distributes `azure-vpn-client.pem` directly. A small wrapper around `az keyvault secret set/get` would centralise rotation.
-- **Wire `enable_dev_codespaces_openvpn` into `terraform-deploy.yml`** once the manual flow has bedded in. This branch deliberately leaves CI/CD untouched.
+- **Wire `enable_dev_codespaces_openvpn` and `enable_dns_private_resolver` into `terraform-deploy.yml`** once the manual flow has bedded in. This branch deliberately leaves CI/CD untouched.
 - **`pg_hba.conf`-equivalent IP allow-list** at the database firewall layer for defence in depth (currently only NSG-gated).
+- **Split-DNS via systemd-resolved** so only `*.privatelink.postgres.database.azure.com` (and other VNet-linked private zones) routes through the resolver, while public lookups continue to use the codespace's default DNS. The current implementation replaces `/etc/resolv.conf` for the duration of the tunnel, which means **all** DNS — including unrelated public lookups — flows through the Azure resolver. That's a small DNS-leak/observability concern, not a security flaw, but split-DNS is the cleaner long-term answer.
 
 ---
 

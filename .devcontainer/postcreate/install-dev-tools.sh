@@ -58,12 +58,47 @@ if [[ -f "${PID_FILE}" ]]; then
 fi
 
 umask 077
-printf '%s\n' "${OPENVPNCONFIG}" > "${CONFIG_FILE}"
+# Strip any `log` / `log-append` directive from the Azure-generated profile
+# before writing it to disk. Background: the OPENVPNCONFIG secret comes from
+# Azure's vpnclientconfiguration.zip, whose OpenVPN/vpnconfig.ovpn ships
+# `log openvpn.log` (relative path). Config-file directives outrank the
+# `--log` CLI flag, so without this strip the daemon writes to
+# /tmp/openvpn.log and our `--log "${LOG_FILE}"` is silently ignored - the
+# `Initialization Sequence Completed` poll below then times out even on a
+# successful tunnel because we're tailing the wrong file.
+# Issue #40 follow-up #1.
+printf '%s\n' "${OPENVPNCONFIG}" |
+    sed -E '/^[[:space:]]*log(-append)?[[:space:]]+/d' \
+        > "${CONFIG_FILE}"
 chmod 600 "${CONFIG_FILE}"
 
 if [[ ! -s "${CONFIG_FILE}" ]]; then
     echo "❌ OPENVPNCONFIG secret is empty after expansion; nothing to do."
     exit 1
+fi
+
+# When the profile was built with the DNS Private Resolver enabled,
+# scripts/build-codespaces-openvpn-config.sh injects
+# `script-security 2` + `up /etc/openvpn/update-resolv-conf` so the
+# resolver IP gets pushed into /etc/resolv.conf. That hook script ships
+# with the openvpn package and depends on /sbin/resolvconf at runtime
+# (provided by the openresolv package installed below). If either piece
+# is missing, openvpn's --script-security check aborts the connection
+# silently from the codespace's perspective; fail loudly here so the
+# operator sees a real diagnostic instead of a 20-second poll timeout.
+if grep -Eq '^[[:space:]]*up[[:space:]]+/etc/openvpn/update-resolv-conf' "${CONFIG_FILE}"; then
+    if [[ ! -x /etc/openvpn/update-resolv-conf ]]; then
+        echo "❌ The OpenVPN profile pushes DNS via /etc/openvpn/update-resolv-conf,"
+        echo "   but that hook is missing or non-executable on this image."
+        echo "   Reinstall the openvpn apt package or rebuild the devcontainer."
+        exit 1
+    fi
+    if ! command -v resolvconf >/dev/null 2>&1; then
+        echo "❌ /etc/openvpn/update-resolv-conf needs /sbin/resolvconf at runtime,"
+        echo "   provided by the 'openresolv' package, which appears to be missing."
+        echo "   Rebuild the devcontainer (the Dockerfile installs it)."
+        exit 1
+    fi
 fi
 
 # `sudo -n` ensures we never block on a password prompt during postStart;

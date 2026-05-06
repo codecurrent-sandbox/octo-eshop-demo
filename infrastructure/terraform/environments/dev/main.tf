@@ -5,6 +5,23 @@ locals {
     ManagedBy   = "Terraform"
     Team        = "Platform"
   }
+
+  # The DNS Private Resolver is only useful in this environment when paired
+  # with the codespaces OpenVPN tunnel: it gives off-VNet codespaces a way
+  # to resolve VNet-private FQDNs (in particular the postgres flexible
+  # servers' privatelink names) without the per-rebuild /etc/hosts hack
+  # documented in docs/dev-codespaces-openvpn.md. Provisioning a resolver
+  # without the VPN therefore burns money (~USD 108/month) for no benefit.
+  # The check block below rejects that combo at plan time so the costly
+  # mistake is impossible.
+  enable_codespaces_dns_resolver = var.enable_dev_codespaces_openvpn && var.enable_dns_private_resolver
+}
+
+check "dns_resolver_requires_vpn" {
+  assert {
+    condition     = !var.enable_dns_private_resolver || var.enable_dev_codespaces_openvpn
+    error_message = "enable_dns_private_resolver = true requires enable_dev_codespaces_openvpn = true. The resolver only has a consumer (codespaces over the OpenVPN P2S tunnel) when the VPN is also enabled. Either enable the VPN or set enable_dns_private_resolver = false."
+  }
 }
 
 resource "random_string" "global_suffix" {
@@ -239,4 +256,21 @@ module "codespaces_vpn" {
   gateway_generation           = var.codespaces_vpn_gateway_generation
   root_certificate_public_data = var.codespaces_vpn_root_certificate_public_data
   tags                         = local.common_tags
+}
+
+module "dns_private_resolver" {
+  source = "../../modules/dns_private_resolver"
+
+  # See locals.enable_codespaces_dns_resolver above: effective creation
+  # requires both the VPN and the resolver flag, since the resolver has no
+  # consumer in this environment without the VPN tunnel.
+  enabled              = local.enable_codespaces_dns_resolver
+  project_name         = var.project_name
+  environment          = var.environment
+  location             = var.location
+  resource_group_name  = azurerm_resource_group.main.name
+  virtual_network_id   = module.networking.vnet_id
+  virtual_network_name = module.networking.vnet_name
+  subnet_prefix        = var.dns_private_resolver_subnet_prefix
+  tags                 = local.common_tags
 }
