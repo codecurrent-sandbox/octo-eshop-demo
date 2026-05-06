@@ -39,6 +39,19 @@ Two feature flags keep the expensive pieces off by default:
 The VPN Gateway and DNS resolver are billable and can take a long time to create
 or destroy. Enable them only while actively using the tunnel.
 
+## CI/CD decision
+
+Do **not** enable this path in the normal CI/CD pipeline. The OpenVPN gateway is
+a developer-access convenience for Codespaces, not a requirement for building,
+testing, or deploying the app. The existing CI Terraform job should keep
+validating the configuration with the feature flags at their default `false`
+values.
+
+If automation is needed later, make it a protected, manual infrastructure
+workflow for the dev environment only. It would need a securely stored trusted
+root certificate public value, but it still should not generate or distribute
+client VPN profiles; those remain per-user secrets.
+
 ## Repo files involved
 
 | Path                                                     | Purpose                                                                          |
@@ -173,9 +186,10 @@ Verify in the Codespace terminal:
 sudo ip addr show tun0
 
 USER_DB_FQDN="$(terraform -chdir=infrastructure/terraform/environments/dev output -raw user_db_fqdn)"
+POSTGRES_PORT="<postgres-port>"
 nslookup "$USER_DB_FQDN"
-nc -vz "$USER_DB_FQDN" 5432
-pg_isready -h "$USER_DB_FQDN" -p 5432
+nc -vz "$USER_DB_FQDN" "$POSTGRES_PORT"
+pg_isready -h "$USER_DB_FQDN" -p "$POSTGRES_PORT"
 ```
 
 With the DNS resolver enabled, private database names should resolve through the
@@ -196,10 +210,13 @@ natively over the tunnel.
 ```bash
 USER_DB_FQDN="$(terraform -chdir=infrastructure/terraform/environments/dev \
     output -raw user_db_fqdn)"
+POSTGRES_PORT="<postgres-port>"
+DB_NAME="<database-name>"
+DB_USER="<database-admin-user>"
 PGPASSWORD="$(az keyvault secret show \
     --vault-name "$(terraform -chdir=infrastructure/terraform/environments/dev output -raw key_vault_name)" \
     --name user-db-connection-string -o tsv --query value | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')" \
-psql "host=$USER_DB_FQDN port=5432 dbname=userdb user=pgadmin sslmode=require"
+psql "host=$USER_DB_FQDN port=$POSTGRES_PORT dbname=$DB_NAME user=$DB_USER sslmode=require"
 ```
 
 For VS Code access, open the PostgreSQL activity bar view and use the three
@@ -247,17 +264,8 @@ Stop the tunnel manually with:
 sudo kill "$(cat .ignore/openvpn.pid)"
 ```
 
-## Alternative approach
-
-A sibling branch explored GitHub-managed hosted-compute private networking. Use
-OpenVPN P2S when Codespaces private networking is not available for the account
-and you need the tunnel now. Prefer GitHub-managed private networking once it is
-available because it avoids per-Codespace VPN setup and the Azure VPN Gateway
-cost.
-
 ## Future improvements
 
 - Store and rotate per-user client certs through Key Vault.
-- Add safer automation around enabling/disabling the Terraform flags.
 - Implement split DNS so only private Azure zones use the resolver while public
   lookups keep using Codespaces default DNS.
