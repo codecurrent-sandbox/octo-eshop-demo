@@ -28,6 +28,17 @@ resource "azurerm_public_ip" "gateway" {
   sku                 = "Standard"
   zones               = local.is_az_sku ? ["1", "2", "3"] : null
   tags                = var.tags
+
+  lifecycle {
+    # Azure attaches a `FirstPartyUsage = /Unprivileged` ip_tag to public
+    # IPs that back gateways behind the scenes (it shows up after creation,
+    # never on the original config). Without this ignore, every subsequent
+    # plan tries to remove the tag which forces a destroy/replace of the
+    # PIP - and replacing the PIP changes the gateway's public IP, which
+    # in turn invalidates every distributed OPENVPNCONFIG secret. Treat
+    # ip_tags as Azure-owned so subsequent applies don't churn the PIP.
+    ignore_changes = [ip_tags]
+  }
 }
 
 resource "azurerm_virtual_network_gateway" "main" {
