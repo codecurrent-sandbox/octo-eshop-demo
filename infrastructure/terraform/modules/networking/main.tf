@@ -43,6 +43,21 @@ resource "azurerm_network_security_group" "database" {
     destination_address_prefix = "*"
   }
 
+  dynamic "security_rule" {
+    for_each = length(var.database_additional_allow_postgres_source_cidrs) > 0 ? [1] : []
+    content {
+      name                       = "AllowPostgreSQLFromAdditionalSources"
+      priority                   = 110
+      direction                  = "Inbound"
+      access                     = "Allow"
+      protocol                   = "Tcp"
+      source_port_range          = "*"
+      destination_port_range     = "5432"
+      source_address_prefixes    = var.database_additional_allow_postgres_source_cidrs
+      destination_address_prefix = "*"
+    }
+  }
+
   security_rule {
     name                       = "DenyAllInbound"
     priority                   = 4096

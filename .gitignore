@@ -47,3 +47,14 @@ tfplan
 
 # CI test artifacts
 .artifacts/
+
+# Dev Codespaces OpenVPN P2S - generated profile/log/pid (see
+# docs/dev-codespaces-openvpn.md and .devcontainer/postcreate/install-dev-tools.sh).
+# Never commit this directory: it contains the private OpenVPN profile.
+.ignore/
+
+# Dev Codespaces OpenVPN P2S - certificate material produced locally by
+# scripts/generate-codespaces-vpn-cert.sh. The client .pem holds a private
+# key.
+codespaces-vpn-secrets/
+.playwright-mcp/

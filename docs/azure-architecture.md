@@ -2,7 +2,7 @@
 
 > Infrastructure and deployment architecture for the Octo E-Shop platform on Microsoft Azure.
 
-![Azure Architecture](azure-architecture.png)
+![Azure Architecture](diagrams/azure-architecture.png)
 
 ## Overview
 

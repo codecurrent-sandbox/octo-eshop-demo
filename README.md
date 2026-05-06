@@ -6,7 +6,7 @@
 
 A bicycle e-commerce platform built with microservices architecture, deployed on Azure Kubernetes Service.
 
-![Architecture](docs/architecture.png)
+![Architecture](docs/diagrams/architecture.png)
 
 ## Technology Stack
 
@@ -95,11 +95,12 @@ octo-eshop-demo/
 
 ## Documentation
 
-| Document                                                 | Description                                             |
-| -------------------------------------------------------- | ------------------------------------------------------- |
-| [📖 Demo Site](https://edinc.github.io/octo-eshop-demo/) | Interactive Copilot demo guides and presenter resources |
-| [Azure Architecture](docs/azure-architecture.md)         | Infrastructure design, Azure services, network topology |
-| [CI/CD Pipeline](docs/cicd-pipeline.md)                  | Workflows, deployment strategy, operational runbook     |
+| Document                                                             | Description                                                                                 |
+| -------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| [📖 Demo Site](https://edinc.github.io/octo-eshop-demo/)             | Interactive Copilot demo guides and presenter resources                                     |
+| [Azure Architecture](docs/azure-architecture.md)                     | Infrastructure design, Azure services, network topology                                     |
+| [CI/CD Pipeline](docs/cicd-pipeline.md)                              | Workflows, deployment strategy, operational runbook                                         |
+| [Codespaces ↔ Azure via OpenVPN P2S](docs/dev-codespaces-openvpn.md) | Optional dev-only tunnel from a Codespace into private dev PostgreSQL via Azure VPN Gateway |
 
 ## License
 
