@@ -52,7 +52,7 @@
             "id": "octoeshop-dev",
             "name": "Octo E-Shop Dev (via VPN)",
             "color": "#0078D4",
-            "description": "Dev PostgreSQL Flexible Servers. Reachable only when the OpenVPN P2S tunnel is up (see docs/dev-codespaces-openvpn.md). Password is prompted on first connect."
+            "description": "Dev PostgreSQL Flexible Servers. Reachable only when the OpenVPN P2S tunnel is up (see docs/dev-codespaces-openvpn.md). Passwords are prepopulated from the DEV_DB_PASSWORDS_JSON Codespaces user secret if set; otherwise the extension prompts on first connect."
           }
         ],
         "pgsql.connections": [
@@ -127,6 +127,6 @@
     "8080": { "label": "API Gateway (Kong)", "onAutoForward": "notify" }
   },
   "postCreateCommand": "npm install && npx husky",
-  "postStartCommand": "bash ./.devcontainer/postcreate/install-dev-tools.sh",
+  "postStartCommand": "bash ./.devcontainer/postcreate/install-dev-tools.sh; bash ./.devcontainer/postcreate/setup-pgsql-credentials.sh",
   "remoteUser": "node"
 }

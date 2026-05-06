@@ -55,11 +55,6 @@ provision locally, paste a Codespaces user secret, rebuild the codespace.
    └────────────────────────────────────────────────────────┘
 ```
 
-For a higher-resolution view including the DNS-resolver flow and the
-Key Vault secret-fetch path, open
-[`diagrams/dev-codespaces-vpn-flow.excalidraw`](diagrams/dev-codespaces-vpn-flow.excalidraw)
-in [excalidraw.com](https://excalidraw.com) (drag-and-drop the file).
-
 ## What gets deployed
 
 Two feature flags gate everything:
@@ -275,11 +270,21 @@ The script:
    OpenVPN guidance.
 6. Prints the final profile to stdout.
 
-### 4. Add the Codespaces secret
+### 4. Add the Codespaces secrets
 
-The secret name is **`OPENVPNCONFIG`** (no underscore). Use a
-**user-level** secret (not repo-level) so the secret value is yours
-alone, then grant it to this repository:
+The codespace reads two **user-level** Codespaces secrets at start. Both
+are optional - the codespace boots either way - but together they remove
+all manual setup once a codespace is running.
+
+| Secret name             | Required for                         | Source                                                                          |
+| ----------------------- | ------------------------------------ | ------------------------------------------------------------------------------- |
+| `OPENVPNCONFIG`         | The OpenVPN tunnel itself.           | `/tmp/vpnconfig.ovpn` produced by `scripts/build-codespaces-openvpn-config.sh`. |
+| `DEV_DB_PASSWORDS_JSON` | Skipping the per-DB password prompt. | `*-db-connection-string` secrets in Key Vault (one per DB).                     |
+
+Use **user-level** secrets (not repo-level) so each developer's values are
+private to them, then grant each secret to this repository.
+
+#### 4a. `OPENVPNCONFIG` (required for the tunnel)
 
 Either via the GitHub web UI:
 
@@ -297,6 +302,51 @@ gh secret set OPENVPNCONFIG \
     --body "$(cat /tmp/vpnconfig.ovpn)"
 ```
 
+#### 4b. `DEV_DB_PASSWORDS_JSON` (optional, prepopulates pgsql passwords)
+
+Without this secret, the official Microsoft PostgreSQL VS Code extension
+(`ms-ossdata.vscode-pgsql`) prompts for the password on first connect to
+each of the three dev databases. Setting this secret prepopulates the
+`password` field on every connection in the extension's tree view, so a
+single click connects without any prompt.
+
+The value is a JSON object mapping **database name** to its admin
+password. The three database names are stable: `userdb`, `productdb`,
+`orderdb`.
+
+Build the JSON straight from Key Vault on the laptop you used for `terraform apply`:
+
+```bash
+KV="$(terraform -chdir=infrastructure/terraform/environments/dev output -raw key_vault_name)"
+extract_pwd() {
+    az keyvault secret show --vault-name "$KV" --name "$1" --query value -o tsv \
+        | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p'
+}
+DEV_DB_PASSWORDS_JSON="$(jq -nc \
+    --arg userdb    "$(extract_pwd user-db-connection-string)" \
+    --arg productdb "$(extract_pwd product-db-connection-string)" \
+    --arg orderdb   "$(extract_pwd order-db-connection-string)" \
+    '{userdb:$userdb, productdb:$productdb, orderdb:$orderdb}')"
+
+gh secret set DEV_DB_PASSWORDS_JSON \
+    --user \
+    --repos "$(gh repo view --json nameWithOwner -q .nameWithOwner)" \
+    --body "$DEV_DB_PASSWORDS_JSON"
+```
+
+The codespace's `postStartCommand` runs
+`.devcontainer/postcreate/setup-pgsql-credentials.sh`, which reads
+`DEV_DB_PASSWORDS_JSON` and writes a per-codespace `.vscode/settings.json`
+(mode `0600`, git-ignored via `.gitignore`'s existing `.vscode/` rule)
+with the `password` field filled in for each connection.
+
+> Rotate the secret whenever the dev DBs are re-created with new random
+> passwords - re-run the snippet above and the secret value is replaced.
+> The codespace picks up the new value on its next start (or after
+> `Codespaces: Rebuild Container`). If VS Code still shows the old
+> password after the codespace finishes starting, run **Developer:
+> Reload Window** to force the extension to re-read settings.
+
 ### 5. Rebuild the Codespace and verify
 
 > **Important — rebuild, not restart.** Changes to `Dockerfile` or `runArgs`
@@ -305,14 +355,21 @@ gh secret set OPENVPNCONFIG \
 > (full rebuild). For a fresh Codespace, just create a new one on the
 > `feature/dev-codespaces-openvpn` branch.
 
-After the rebuild, the `postStartCommand` calls `install-dev-tools.sh`,
-which:
+After the rebuild, the `postStartCommand` calls two scripts in sequence:
+
+`install-dev-tools.sh`, which brings up the tunnel:
 
 - Verifies `/dev/net/tun` exists in the container (preflight check).
 - Writes `OPENVPNCONFIG` to `.ignore/openvpn.config` (mode `600`).
 - Launches `openvpn` as a daemon, logs to `.ignore/openvpn.log`, and
   records the PID in `.ignore/openvpn.pid`.
 - Polls the log for `Initialization Sequence Completed` for up to 20s.
+
+`setup-pgsql-credentials.sh`, which (when `DEV_DB_PASSWORDS_JSON` is set)
+materializes a per-codespace `.vscode/settings.json` (mode `600`,
+git-ignored) with the `password` field filled in on each
+`pgsql.connections` entry, so the official Microsoft PostgreSQL VS Code
+extension stops prompting on every connect.
 
 Verify in the Codespace terminal:
 
@@ -428,8 +485,12 @@ three connections under the **Octo E-Shop Dev (via VPN)** group:
 | `order-db (dev)`   | `octoeshop-dev-order-db-qyqw.postgres.database.azure.com`   | `orderdb`   | `pgadmin` |
 
 All three use `sslmode=require` and SQL-login auth (the dev servers don't
-have Entra auth enabled). On first connect the extension prompts for the
-password and remembers it in VS Code's SecretStorage for the codespace's
+have Entra auth enabled). When the **`DEV_DB_PASSWORDS_JSON`** Codespaces
+user secret is set (see [step 4b](#4b-dev_db_passwords_json-optional-prepopulates-pgsql-passwords)),
+the password for every connection is prepopulated by the
+`setup-pgsql-credentials.sh` postStart script - one click connects, no
+prompt. Without that secret, the extension prompts on first connect and
+remembers the value in VS Code's SecretStorage for the codespace's
 lifetime.
 
 **Two prerequisites for the connect to succeed:**
