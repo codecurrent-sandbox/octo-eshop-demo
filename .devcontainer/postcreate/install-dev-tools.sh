@@ -118,9 +118,16 @@ sudo -n nohup openvpn \
     --daemon
 
 # Give openvpn a moment to either come up or fail.
+#
+# The log and pid files are owned by root (openvpn drops them with the
+# umask we inherited via sudo, mode 0600), so the unprivileged `node`
+# user that runs this poll cannot read them directly. Use `sudo -n` for
+# the readiness checks, mirroring the same pattern used above for the
+# PID-liveness `kill -0`. See issue #40 follow-up #3.
 for _ in $(seq 1 20); do
-    if [[ -s "${LOG_FILE}" ]] && grep -q "Initialization Sequence Completed" "${LOG_FILE}"; then
-        echo "✅ OpenVPN tunnel up. PID: $(cat "${PID_FILE}" 2>/dev/null || echo unknown)"
+    if sudo -n test -s "${LOG_FILE}" \
+        && sudo -n grep -q "Initialization Sequence Completed" "${LOG_FILE}"; then
+        echo "✅ OpenVPN tunnel up. PID: $(sudo -n cat "${PID_FILE}" 2>/dev/null || echo unknown)"
         echo "   Log: ${LOG_FILE}"
         exit 0
     fi
@@ -129,7 +136,7 @@ done
 
 echo "⚠️  OpenVPN did not finish initialization within 20s."
 echo "    Tail of ${LOG_FILE}:"
-tail -n 25 "${LOG_FILE}" 2>/dev/null || true
+sudo -n tail -n 25 "${LOG_FILE}" 2>/dev/null || true
 echo "    Re-run this script to retry, or 'Rebuild Container' if /dev/net/tun"
 echo "    is missing. The codespace remains usable for non-VPN work."
 exit 1
