@@ -103,16 +103,71 @@ Set `DEV_DB_PASSWORDS_JSON` as another Codespaces user secret if you want the
 PostgreSQL VS Code extension to connect without prompting. Its value is a JSON
 object mapping the configured database names to their passwords from Key Vault.
 
+Build the JSON straight from Key Vault on the laptop you used for `terraform apply`:
+
+```bash
+KV="$(terraform -chdir=infrastructure/terraform/environments/dev output -raw key_vault_name)"
+extract_pwd() {
+    az keyvault secret show --vault-name "$KV" --name "$1" --query value -o tsv \
+        | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p'
+}
+DEV_DB_PASSWORDS_JSON="$(jq -nc \
+    --arg userdb    "$(extract_pwd user-db-connection-string)" \
+    --arg productdb "$(extract_pwd product-db-connection-string)" \
+    --arg orderdb   "$(extract_pwd order-db-connection-string)" \
+    '{userdb:$userdb, productdb:$productdb, orderdb:$orderdb}')"
+
+gh secret set DEV_DB_PASSWORDS_JSON \
+    --user \
+    --repos "$(gh repo view --json nameWithOwner -q .nameWithOwner)" \
+    --body "$DEV_DB_PASSWORDS_JSON"
+```
+
 The setup script writes the values to a per-Codespace `.vscode/settings.json`
-with restrictive file permissions. Rebuild the Codespace after rotating this
-secret because Codespaces injects updated user secrets at container creation.
+with restrictive file permissions. It writes both `password` and
+`savePassword: true`; on activation, the PostgreSQL extension moves the
+password into VS Code SecretStorage and rewrites the settings file with the
+plaintext `password` field blank. That blank field is expected;
+`savePassword: true` is what makes the extension read the saved SecretStorage
+value.
+
+> Rotate the secret whenever the dev DBs are re-created with new random
+> passwords — re-run the snippet above and the secret value is replaced.
+> Codespaces only re-injects user secrets at container creation, so pick
+> up the new value with **Codespaces: Rebuild Container** (a plain
+> stop/start keeps the old env var). After the rebuild the new password
+> is already filled in when VS Code attaches.
 
 ### 5. Rebuild the Codespace and verify
 
 Use **Codespaces: Rebuild Container** or create a fresh Codespace. A restart is
 not enough when Dockerfile or `runArgs` changed.
 
-Inside the Codespace:
+After the rebuild, two lifecycle hooks fire:
+
+`onCreateCommand` runs `setup-pgsql-credentials.sh` once, before VS Code
+attaches. When `DEV_DB_PASSWORDS_JSON` is set it materializes a
+per-codespace `.vscode/settings.json` (mode `600`, git-ignored) with the
+`password` field filled in and `savePassword: true` on each
+`pgsql.connections` entry, so the official Microsoft PostgreSQL VS Code
+extension saves the populated passwords to SecretStorage on its first
+activation — no Reload Window required.
+
+`postStartCommand` then calls two scripts in sequence:
+
+`install-dev-tools.sh`, which brings up the tunnel:
+
+- Verifies `/dev/net/tun` exists in the container (preflight check).
+- Writes `OPENVPNCONFIG` to `.ignore/openvpn.config` (mode `600`).
+- Launches `openvpn` as a daemon, logs to `.ignore/openvpn.log`, and
+  records the PID in `.ignore/openvpn.pid`.
+- Polls the log for `Initialization Sequence Completed` for up to 20s.
+
+`setup-pgsql-credentials.sh` runs again as a no-op refresh (idempotent
+with respect to `DEV_DB_PASSWORDS_JSON`); this keeps the file in sync on
+every start without forcing a rebuild.
+
+Verify in the Codespace terminal:
 
 ```bash
 sudo ip addr show tun0
@@ -137,6 +192,20 @@ connect.
 For CLI access, pull the relevant database FQDN from Terraform outputs and the
 password from Key Vault. Prefer the DNS resolver flow so the FQDN resolves
 natively over the tunnel.
+
+```bash
+USER_DB_FQDN="$(terraform -chdir=infrastructure/terraform/environments/dev \
+    output -raw user_db_fqdn)"
+PGPASSWORD="$(az keyvault secret show \
+    --vault-name "$(terraform -chdir=infrastructure/terraform/environments/dev output -raw key_vault_name)" \
+    --name user-db-connection-string -o tsv --query value | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')" \
+psql "host=$USER_DB_FQDN port=5432 dbname=userdb user=pgadmin sslmode=require"
+```
+
+For VS Code access, open the PostgreSQL activity bar view and use the three
+preconfigured dev profiles. When `DEV_DB_PASSWORDS_JSON` is set, one click
+connects with no password prompt after the extension saves the generated
+profile passwords to SecretStorage.
 
 ### 7. Tear down when done
 

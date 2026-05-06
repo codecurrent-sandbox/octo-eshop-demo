@@ -65,7 +65,6 @@
             "database": "userdb",
             "user": "pgadmin",
             "authenticationType": "SqlLogin",
-            "emptyPasswordInput": true,
             "sslmode": "require"
           },
           {
@@ -77,7 +76,6 @@
             "database": "productdb",
             "user": "pgadmin",
             "authenticationType": "SqlLogin",
-            "emptyPasswordInput": true,
             "sslmode": "require"
           },
           {
@@ -89,7 +87,6 @@
             "database": "orderdb",
             "user": "pgadmin",
             "authenticationType": "SqlLogin",
-            "emptyPasswordInput": true,
             "sslmode": "require"
           }
         ]

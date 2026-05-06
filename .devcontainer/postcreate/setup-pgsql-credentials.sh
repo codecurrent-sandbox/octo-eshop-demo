@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 #
-# Prepopulate the password field on every `pgsql.connections` entry the
+# Prepopulate and save the password on every `pgsql.connections` entry the
 # Microsoft PostgreSQL VS Code extension (ms-ossdata.vscode-pgsql) sees in
 # this codespace, so it does not prompt for a password every time the user
 # clicks a connection.
@@ -9,14 +9,15 @@
 #   * Server, port, database and user are baked into devcontainer.json under
 #     `customizations.vscode.settings.pgsql.connections`. Adding `password`
 #     there would commit the dev DB credentials to the repo - not acceptable.
-#   * The extension does support a `password` field (verified against the
-#     ms-ossdata.vscode-pgsql 1.21.x configuration schema), so all we need is
-#     a way to inject that field per-codespace, from a per-user secret.
+#   * The extension supports a `password` field in its configuration schema,
+#     but strips plaintext passwords from settings on activation. To make the
+#     value survive, each generated profile also sets `savePassword: true`,
+#     which tells the extension to move the password into VS Code SecretStorage.
 #   * VS Code merges workspace settings (`.vscode/settings.json`) on top of
 #     the devcontainer-injected machine settings. For array keys like
 #     `pgsql.connections` it is a *replace*, not a merge - so we copy the
-#     entire connections array into `.vscode/settings.json` and add the
-#     `password` value on top. `.vscode/` is already git-ignored.
+#     entire connections array into `.vscode/settings.json` and add
+#     `password` + `savePassword` on top. `.vscode/` is already git-ignored.
 #
 # Inputs:
 #   DEV_DB_PASSWORDS_JSON (Codespaces user secret) - JSON object mapping
@@ -32,7 +33,9 @@
 #
 # Outputs:
 #   .vscode/settings.json - written with mode 0600. Holds the cloned
-#       `pgsql.connections` array with `password` filled in per database.
+#       `pgsql.connections` array with `password` filled in per database and
+#       `savePassword: true`. On PostgreSQL extension activation, the extension
+#       stores the password in SecretStorage and blanks the plaintext field.
 #       Git-ignored via the existing `.vscode/` rule in .gitignore.
 #
 # Idempotent: safe to run on every onCreate / postStart. Re-running with
@@ -86,8 +89,9 @@ python3 - "${DEVCONTAINER_JSON}" "${SETTINGS_FILE}" <<'PY'
 
 Reads `pgsql.connections` out of devcontainer.json (which is JSON-with-
 Comments), fills in the `password` field per database name from the
-DEV_DB_PASSWORDS_JSON env var, and writes the result to
-.vscode/settings.json.
+DEV_DB_PASSWORDS_JSON env var, sets `savePassword: true` so the PostgreSQL
+extension migrates the secret into VS Code SecretStorage, and writes the
+result to .vscode/settings.json.
 """
 import json
 import os
@@ -176,10 +180,13 @@ out_connections = []
 for conn in connections:
     conn = dict(conn)  # Shallow copy so we don't mutate the loaded JSON.
     db = conn.get("database")
-    if db in pwd_map:
-        conn["password"] = pwd_map[db]
-        # `emptyPasswordInput: true` tells the extension the user wants no
-        # password at all; drop it once we provide one.
+    password = pwd_map.get(db)
+    if isinstance(password, str) and password:
+        conn["password"] = password
+        conn["savePassword"] = True
+        # `emptyPasswordInput: true` tells the extension the user wants the
+        # "No Password" authentication mode. Drop it for SQL-login profiles
+        # so the extension saves/uses the provided password instead.
         conn.pop("emptyPasswordInput", None)
         filled += 1
     out_connections.append(conn)
