@@ -334,18 +334,24 @@ gh secret set DEV_DB_PASSWORDS_JSON \
     --body "$DEV_DB_PASSWORDS_JSON"
 ```
 
-The codespace's `postStartCommand` runs
+The codespace's `onCreateCommand` runs
 `.devcontainer/postcreate/setup-pgsql-credentials.sh`, which reads
 `DEV_DB_PASSWORDS_JSON` and writes a per-codespace `.vscode/settings.json`
 (mode `0600`, git-ignored via `.gitignore`'s existing `.vscode/` rule)
-with the `password` field filled in for each connection.
+with the `password` field filled in for each connection. The same script
+is re-run by `postStartCommand` so the file stays in sync on every start.
+
+`onCreateCommand` runs _before_ VS Code attaches to the container (the
+default `waitFor` is `updateContentCommand`, which is later in the
+lifecycle), so the file is on disk before the PostgreSQL extension
+activates — no `Developer: Reload Window` step is needed.
 
 > Rotate the secret whenever the dev DBs are re-created with new random
-> passwords - re-run the snippet above and the secret value is replaced.
-> The codespace picks up the new value on its next start (or after
-> `Codespaces: Rebuild Container`). If VS Code still shows the old
-> password after the codespace finishes starting, run **Developer:
-> Reload Window** to force the extension to re-read settings.
+> passwords — re-run the snippet above and the secret value is replaced.
+> Codespaces only re-injects user secrets at container creation, so pick
+> up the new value with **Codespaces: Rebuild Container** (a plain
+> stop/start keeps the old env var). After the rebuild the new password
+> is already filled in when VS Code attaches.
 
 ### 5. Rebuild the Codespace and verify
 
@@ -355,7 +361,16 @@ with the `password` field filled in for each connection.
 > (full rebuild). For a fresh Codespace, just create a new one on the
 > `feature/dev-codespaces-openvpn` branch.
 
-After the rebuild, the `postStartCommand` calls two scripts in sequence:
+After the rebuild, two lifecycle hooks fire:
+
+`onCreateCommand` runs `setup-pgsql-credentials.sh` once, before VS Code
+attaches. When `DEV_DB_PASSWORDS_JSON` is set it materializes a
+per-codespace `.vscode/settings.json` (mode `600`, git-ignored) with the
+`password` field filled in on each `pgsql.connections` entry, so the
+official Microsoft PostgreSQL VS Code extension reads the populated
+passwords on its first activation — no Reload Window required.
+
+`postStartCommand` then calls two scripts in sequence:
 
 `install-dev-tools.sh`, which brings up the tunnel:
 
@@ -365,11 +380,9 @@ After the rebuild, the `postStartCommand` calls two scripts in sequence:
   records the PID in `.ignore/openvpn.pid`.
 - Polls the log for `Initialization Sequence Completed` for up to 20s.
 
-`setup-pgsql-credentials.sh`, which (when `DEV_DB_PASSWORDS_JSON` is set)
-materializes a per-codespace `.vscode/settings.json` (mode `600`,
-git-ignored) with the `password` field filled in on each
-`pgsql.connections` entry, so the official Microsoft PostgreSQL VS Code
-extension stops prompting on every connect.
+`setup-pgsql-credentials.sh` runs again as a no-op refresh (idempotent
+with respect to `DEV_DB_PASSWORDS_JSON`); this keeps the file in sync on
+every start without forcing a rebuild.
 
 Verify in the Codespace terminal:
 

@@ -35,9 +35,16 @@
 #       `pgsql.connections` array with `password` filled in per database.
 #       Git-ignored via the existing `.vscode/` rule in .gitignore.
 #
-# Idempotent: safe to run on every postStart. Re-running with the same
-# secret produces the same file. Re-running after the secret changes
-# silently picks up the new values.
+# Idempotent: safe to run on every onCreate / postStart. Re-running with
+# the same secret produces the same file. Re-running after the secret
+# changes silently picks up the new values.
+#
+# Lifecycle wiring (see .devcontainer/devcontainer.json):
+#   * onCreateCommand   - first run, *before* VS Code attaches to the
+#     container, so the file is on disk before the PostgreSQL extension
+#     activates and no `Developer: Reload Window` is needed.
+#   * postStartCommand  - re-run on every start to keep the file in sync
+#     with the latest secret value.
 
 set -euo pipefail
 

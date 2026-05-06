@@ -126,6 +126,14 @@
     "3005": { "label": "Payment Service", "onAutoForward": "silent" },
     "8080": { "label": "API Gateway (Kong)", "onAutoForward": "notify" }
   },
+  // Run the pgsql credential script in onCreateCommand (and again on every
+  // postStart) so .vscode/settings.json with prepopulated passwords is on
+  // disk *before* VS Code attaches to the container. The default `waitFor`
+  // value (`updateContentCommand`) makes the editor wait for the chain
+  // onCreateCommand → updateContentCommand, so by the time the PostgreSQL
+  // extension activates the passwords are already in workspace settings —
+  // no Reload Window needed. See docs/dev-codespaces-openvpn.md.
+  "onCreateCommand": "bash ./.devcontainer/postcreate/setup-pgsql-credentials.sh",
   "postCreateCommand": "npm install && npx husky",
   "postStartCommand": "bash ./.devcontainer/postcreate/install-dev-tools.sh; bash ./.devcontainer/postcreate/setup-pgsql-credentials.sh",
   "remoteUser": "node"
