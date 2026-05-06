@@ -1,6 +1,6 @@
 # Dev Codespaces to Azure Private PostgreSQL with OpenVPN P2S
 
-> **Status:** Implemented on `feature/dev-codespaces-openvpn`.
+> **Status:** Available for dev Codespaces when the Terraform feature flags are enabled.
 
 The dev PostgreSQL Flexible Servers are private-only, so GitHub Codespaces cannot
 reach them over the public internet. This setup gives a Codespace temporary
@@ -136,9 +136,10 @@ gh secret set DEV_DB_PASSWORDS_JSON \
     --body "$DEV_DB_PASSWORDS_JSON"
 ```
 
-The setup script writes the values to a per-Codespace `.vscode/settings.json`
-with restrictive file permissions. It writes both `password` and
-`savePassword: true`; on activation, the PostgreSQL extension moves the
+The setup script always generates the PostgreSQL VS Code extension profiles from
+Terraform `*_db_fqdn` outputs so server names stay current after the dev
+environment is recreated. When `DEV_DB_PASSWORDS_JSON` is set, it also writes
+`password` and `savePassword: true`; on activation, the extension moves the
 password into VS Code SecretStorage and rewrites the settings file with the
 plaintext `password` field blank. That blank field is expected;
 `savePassword: true` is what makes the extension read the saved SecretStorage
@@ -159,12 +160,12 @@ not enough when Dockerfile or `runArgs` changed.
 After the rebuild, two lifecycle hooks fire:
 
 `onCreateCommand` runs `setup-pgsql-credentials.sh` once, before VS Code
-attaches. When `DEV_DB_PASSWORDS_JSON` is set it materializes a
-per-codespace `.vscode/settings.json` (mode `600`, git-ignored) with the
-`password` field filled in and `savePassword: true` on each
-`pgsql.connections` entry, so the official Microsoft PostgreSQL VS Code
-extension saves the populated passwords to SecretStorage on its first
-activation — no Reload Window required.
+attaches. It materializes a per-codespace `.vscode/settings.json` (mode `600`,
+git-ignored) with PostgreSQL profiles generated from Terraform outputs. When
+`DEV_DB_PASSWORDS_JSON` is set, those profiles also include `password` and
+`savePassword: true`, so the official Microsoft PostgreSQL VS Code extension
+saves the populated passwords to SecretStorage on its first activation — no
+Reload Window required.
 
 `postStartCommand` then calls two scripts in sequence:
 
@@ -186,10 +187,9 @@ Verify in the Codespace terminal:
 sudo ip addr show tun0
 
 USER_DB_FQDN="$(terraform -chdir=infrastructure/terraform/environments/dev output -raw user_db_fqdn)"
-POSTGRES_PORT="<postgres-port>"
 nslookup "$USER_DB_FQDN"
-nc -vz "$USER_DB_FQDN" "$POSTGRES_PORT"
-pg_isready -h "$USER_DB_FQDN" -p "$POSTGRES_PORT"
+nc -vz "$USER_DB_FQDN" 5432
+pg_isready -h "$USER_DB_FQDN" -p 5432
 ```
 
 With the DNS resolver enabled, private database names should resolve through the
@@ -210,13 +210,12 @@ natively over the tunnel.
 ```bash
 USER_DB_FQDN="$(terraform -chdir=infrastructure/terraform/environments/dev \
     output -raw user_db_fqdn)"
-POSTGRES_PORT="<postgres-port>"
 DB_NAME="<database-name>"
 DB_USER="<database-admin-user>"
 PGPASSWORD="$(az keyvault secret show \
     --vault-name "$(terraform -chdir=infrastructure/terraform/environments/dev output -raw key_vault_name)" \
     --name user-db-connection-string -o tsv --query value | sed -n 's|.*://[^:]*:\([^@]*\)@.*|\1|p')" \
-psql "host=$USER_DB_FQDN port=$POSTGRES_PORT dbname=$DB_NAME user=$DB_USER sslmode=require"
+psql "host=$USER_DB_FQDN port=5432 dbname=$DB_NAME user=$DB_USER sslmode=require"
 ```
 
 For VS Code access, open the PostgreSQL activity bar view and use the three

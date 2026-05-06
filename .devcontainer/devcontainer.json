@@ -46,50 +46,7 @@
         },
         "eslint.workingDirectories": [{ "pattern": "services/*" }, { "pattern": "shared/*" }],
         "files.eol": "\n",
-        "prisma.showPrismaDataPlatformNotification": false,
-        "pgsql.serverGroups": [
-          {
-            "id": "octoeshop-dev",
-            "name": "Octo E-Shop Dev (via VPN)",
-            "color": "#0078D4",
-            "description": "Dev PostgreSQL Flexible Servers. Reachable only when the OpenVPN P2S tunnel is up (see docs/dev-codespaces-openvpn.md). Passwords are prepopulated from the DEV_DB_PASSWORDS_JSON Codespaces user secret if set; otherwise the extension prompts on first connect."
-          }
-        ],
-        "pgsql.connections": [
-          {
-            "id": "octoeshop-dev-user-db",
-            "groupId": "octoeshop-dev",
-            "profileName": "user-db (dev)",
-            "server": "octoeshop-dev-user-db-qyqw.postgres.database.azure.com",
-            "port": "5432",
-            "database": "userdb",
-            "user": "pgadmin",
-            "authenticationType": "SqlLogin",
-            "sslmode": "require"
-          },
-          {
-            "id": "octoeshop-dev-product-db",
-            "groupId": "octoeshop-dev",
-            "profileName": "product-db (dev)",
-            "server": "octoeshop-dev-product-db-qyqw.postgres.database.azure.com",
-            "port": "5432",
-            "database": "productdb",
-            "user": "pgadmin",
-            "authenticationType": "SqlLogin",
-            "sslmode": "require"
-          },
-          {
-            "id": "octoeshop-dev-order-db",
-            "groupId": "octoeshop-dev",
-            "profileName": "order-db (dev)",
-            "server": "octoeshop-dev-order-db-qyqw.postgres.database.azure.com",
-            "port": "5432",
-            "database": "orderdb",
-            "user": "pgadmin",
-            "authenticationType": "SqlLogin",
-            "sslmode": "require"
-          }
-        ]
+        "prisma.showPrismaDataPlatformNotification": false
       },
       "extensions": [
         "dbaeumer.vscode-eslint",
@@ -123,13 +80,10 @@
     "3005": { "label": "Payment Service", "onAutoForward": "silent" },
     "8080": { "label": "API Gateway (Kong)", "onAutoForward": "notify" }
   },
-  // Run the pgsql credential script in onCreateCommand (and again on every
-  // postStart) so .vscode/settings.json with prepopulated passwords is on
-  // disk *before* VS Code attaches to the container. The default `waitFor`
-  // value (`updateContentCommand`) makes the editor wait for the chain
-  // onCreateCommand → updateContentCommand, so by the time the PostgreSQL
-  // extension activates the passwords are already in workspace settings —
-  // no Reload Window needed. See docs/dev-codespaces-openvpn.md.
+  // Run the pgsql setup script in onCreateCommand (and again on every
+  // postStart) so .vscode/settings.json contains Terraform-derived database
+  // FQDNs, plus optional prepopulated passwords, before the PostgreSQL
+  // extension activates. See docs/dev-codespaces-openvpn.md.
   "onCreateCommand": "bash ./.devcontainer/postcreate/setup-pgsql-credentials.sh",
   "postCreateCommand": "npm install && npx husky",
   "postStartCommand": "bash ./.devcontainer/postcreate/install-dev-tools.sh; bash ./.devcontainer/postcreate/setup-pgsql-credentials.sh",
