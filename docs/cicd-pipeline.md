@@ -352,6 +352,26 @@ Each environment stores state in the shared Azure Storage Account:
 - Container: `tfstate`
 - Keys: `dev.terraform.tfstate`, `staging.terraform.tfstate`, `production.terraform.tfstate`
 - Authentication: OIDC via Azure AD (no shared keys)
+- Network: GitHub-hosted runners require the storage account public endpoint to
+  be enabled. Access is still restricted by Entra ID/RBAC, shared keys are
+  disabled, and anonymous blob access is disabled. If the backend is moved
+  behind a private endpoint, the Terraform workflow must also move to a
+  private/self-hosted runner with network access to that endpoint.
+
+**Optional dev Codespaces private access:**
+
+The dev Terraform environment can provision a Point-to-Site OpenVPN gateway and
+Azure DNS Private Resolver for Codespaces access to private PostgreSQL. These
+resources are off by default, but the workflow reads repository settings so an
+intentional enablement is preserved across later pipeline runs instead of being
+reversed by the next apply:
+
+- `ENABLE_DEV_CODESPACES_OPENVPN` repository variable
+- `ENABLE_DNS_PRIVATE_RESOLVER` repository variable
+- `CODESPACES_VPN_ROOT_CERTIFICATE_PUBLIC_DATA` repository secret
+
+Do not enable the VPN only with local `TF_VAR_*` exports unless the matching
+GitHub settings are updated before the next infrastructure run.
 
 **Terraform Provider:**
 
@@ -434,17 +454,25 @@ graph LR
 
 ### Repository-Level Secrets
 
-| Secret                  | Description                                               | Used By       |
-| ----------------------- | --------------------------------------------------------- | ------------- |
-| `AZURE_CLIENT_ID`       | Azure AD app registration client ID (OIDC authentication) | All workflows |
-| `AZURE_TENANT_ID`       | Azure AD tenant ID                                        | All workflows |
-| `AZURE_SUBSCRIPTION_ID` | Azure subscription ID                                     | All workflows |
-| `ACR_LOGIN_SERVER`      | ACR login URL (shared across environments)                | Build & Push  |
-| `ACR_USERNAME`          | ACR admin username                                        | Build & Push  |
-| `ACR_PASSWORD`          | ACR admin password                                        | Build & Push  |
-| `GH_TOKEN`              | GitHub PAT with `repo` scope (for automated secrets sync) | Terraform     |
+| Secret                                        | Description                                                              | Used By       |
+| --------------------------------------------- | ------------------------------------------------------------------------ | ------------- |
+| `AZURE_CLIENT_ID`                             | Azure AD app registration client ID (OIDC authentication)                | All workflows |
+| `AZURE_TENANT_ID`                             | Azure AD tenant ID                                                       | All workflows |
+| `AZURE_SUBSCRIPTION_ID`                       | Azure subscription ID                                                    | All workflows |
+| `ACR_LOGIN_SERVER`                            | ACR login URL (shared across environments)                               | Build & Push  |
+| `ACR_USERNAME`                                | ACR admin username                                                       | Build & Push  |
+| `ACR_PASSWORD`                                | ACR admin password                                                       | Build & Push  |
+| `GH_TOKEN`                                    | GitHub PAT with `repo` scope (for automated secrets sync)                | Terraform     |
+| `CODESPACES_VPN_ROOT_CERTIFICATE_PUBLIC_DATA` | Public root certificate body for the optional dev Codespaces VPN gateway | Terraform     |
 
 > **Note:** Authentication uses OIDC federated credentials (no client secrets). The Azure AD app registration `octoeshop-github-actions` has federated credentials configured for the `main` branch, pull requests, and all three GitHub environments (dev, staging, production).
+
+### Repository-Level Variables
+
+| Variable                        | Description                                             | Used By   |
+| ------------------------------- | ------------------------------------------------------- | --------- |
+| `ENABLE_DEV_CODESPACES_OPENVPN` | Set to `true` to keep the optional dev OpenVPN gateway  | Terraform |
+| `ENABLE_DNS_PRIVATE_RESOLVER`   | Set to `true` to keep the optional dev private resolver | Terraform |
 
 ### Environment-Scoped Secrets
 
@@ -532,7 +560,7 @@ The `network-policies` chart is deployed **first** in every environment. It defi
 To recreate the entire platform from zero:
 
 ```bash
-# 1. One-time bootstrap: Terraform backend + Azure SP + GitHub secrets
+# 1. One-time bootstrap: Terraform backend + GitHub Actions OIDC secrets
 ./scripts/bootstrap-backend.sh --subscription <sub-id> --repo <owner/repo>
 
 # 2. Provision infrastructure (creates AKS, databases, Key Vault, etc.)

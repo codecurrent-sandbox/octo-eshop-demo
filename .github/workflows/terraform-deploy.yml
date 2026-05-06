@@ -47,6 +47,56 @@ jobs:
           echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
           echo "ARM_USE_OIDC=true" >> $GITHUB_ENV
 
+      - name: Configure optional dev Terraform inputs
+        if: inputs.environment == 'dev'
+        env:
+          ENABLE_DEV_CODESPACES_OPENVPN: ${{ vars.ENABLE_DEV_CODESPACES_OPENVPN }}
+          ENABLE_DNS_PRIVATE_RESOLVER: ${{ vars.ENABLE_DNS_PRIVATE_RESOLVER }}
+          CODESPACES_VPN_ROOT_CERTIFICATE_PUBLIC_DATA: ${{ secrets.CODESPACES_VPN_ROOT_CERTIFICATE_PUBLIC_DATA }}
+        run: |
+          set -euo pipefail
+
+          normalize_bool() {
+            local name="$1"
+            local value
+            value=$(printf '%s' "${2:-false}" | tr '[:upper:]' '[:lower:]')
+
+            case "$value" in
+              true|1|yes) echo true ;;
+              false|0|no|"") echo false ;;
+              *)
+                echo "::error::$name must be true or false."
+                exit 1
+                ;;
+            esac
+          }
+
+          enable_vpn=$(normalize_bool ENABLE_DEV_CODESPACES_OPENVPN "$ENABLE_DEV_CODESPACES_OPENVPN")
+          enable_dns=$(normalize_bool ENABLE_DNS_PRIVATE_RESOLVER "$ENABLE_DNS_PRIVATE_RESOLVER")
+
+          if [ "$enable_dns" = "true" ] && [ "$enable_vpn" != "true" ]; then
+            echo "::error::ENABLE_DNS_PRIVATE_RESOLVER requires ENABLE_DEV_CODESPACES_OPENVPN=true."
+            exit 1
+          fi
+
+          if [ "$enable_vpn" = "true" ] && [ -z "$CODESPACES_VPN_ROOT_CERTIFICATE_PUBLIC_DATA" ]; then
+            echo "::error::CODESPACES_VPN_ROOT_CERTIFICATE_PUBLIC_DATA is required when ENABLE_DEV_CODESPACES_OPENVPN=true."
+            exit 1
+          fi
+
+          jq -n \
+            --argjson enable_vpn "$enable_vpn" \
+            --argjson enable_dns "$enable_dns" \
+            --arg root_cert "$CODESPACES_VPN_ROOT_CERTIFICATE_PUBLIC_DATA" \
+            '{
+              enable_dev_codespaces_openvpn: $enable_vpn,
+              enable_dns_private_resolver: $enable_dns
+            } + (
+              if $root_cert == "" then {}
+              else {codespaces_vpn_root_certificate_public_data: $root_cert}
+              end
+            )' > codespaces.auto.tfvars.json
+
       - name: Terraform Init
         run: terraform init
 
