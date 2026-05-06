@@ -1,18 +1,18 @@
 # Dev Codespaces ↔ Azure Private PostgreSQL via OpenVPN P2S
 
-> **Status:** Alternative approach implemented on `feature/dev-codespaces-openvpn`.
-> See [Comparison to the hosted-compute approach](#comparison-to-the-hosted-compute-approach) below.
+> **Status:** Implemented on `feature/dev-codespaces-openvpn`.
+> A sibling branch explores a different solution; see
+> [Comparison to the hosted-compute approach](#comparison-to-the-hosted-compute-approach) below.
 
 The dev PostgreSQL Flexible Servers are private-only
 (`public_network_access_enabled = false`, attached to a delegated subnet on
 the dev VNet). GitHub Codespaces cannot reach them over the public internet.
 
-This guide covers an end-to-end **OpenVPN Point-to-Site** approach modelled
-on Daniel Meixner's article
-[Connecting Codespaces to Azure VNets via VPN](https://danielmeixner.github.io/Codespaces-VPN-Azure/)
-and the canonical [`codespaces-contrib/codespaces-openvpn`](https://github.com/codespaces-contrib/codespaces-openvpn)
-sample. It is intentionally testable end-to-end **without CI/CD** — provision
-locally, paste a Codespaces secret, rebuild the codespace.
+This guide covers an end-to-end **OpenVPN Point-to-Site** solution that
+brings the codespace inside the dev VNet, with native private DNS for
+`*.privatelink.postgres.database.azure.com` via the Azure DNS Private
+Resolver. It is intentionally testable end-to-end **without CI/CD** —
+provision locally, paste a Codespaces user secret, rebuild the codespace.
 
 ---
 
@@ -55,23 +55,101 @@ locally, paste a Codespaces secret, rebuild the codespace.
    └────────────────────────────────────────────────────────┘
 ```
 
-## Azure resources
+For a higher-resolution view including the DNS-resolver flow and the
+Key Vault secret-fetch path, open
+[`diagrams/dev-codespaces-vpn-flow.excalidraw`](diagrams/dev-codespaces-vpn-flow.excalidraw)
+in [excalidraw.com](https://excalidraw.com) (drag-and-drop the file).
 
-All gated by `var.enable_dev_codespaces_openvpn` (default `false`).
+## What gets deployed
 
-| Resource (Terraform)                                                                | Purpose                                                                                                                                                                                                                                                   |
-| ----------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `azurerm_subnet.gateway` (`GatewaySubnet`, `10.0.255.0/27`)                         | Azure-mandated dedicated subnet for the gateway. Name must be exactly `GatewaySubnet`.                                                                                                                                                                    |
-| `azurerm_public_ip.gateway` (Standard, Static; zonal only when SKU ends in `AZ`)    | Public endpoint for OpenVPN clients to reach. Zones are set automatically based on `gateway_sku`: regional for non-AZ SKUs, zone-redundant for `*AZ`. Since Azure deprecated non-AZ VPN Gateway SKUs in 2026, in practice this is always `["1","2","3"]`. |
-| `azurerm_virtual_network_gateway.main` (`VpnGw1AZ`, `Generation1`, `RouteBased`)    | The P2S gateway. `vpn_client_configuration` enables OpenVPN tunnel type, certificate auth, address pool, and trusted root cert. Azure no longer accepts non-AZ SKUs (`NonAzSkusNotAllowedForVPNGateway`); only `VpnGw{1,2,3}AZ` are valid.                |
-| `security_rule "AllowPostgreSQLFromAdditionalSources"` (inside `module.networking`) | Allow tcp/5432 from `172.16.201.0/24`. Priority `110`, between the AKS allow (100) and deny-all (4096). Managed inline alongside the existing DB NSG rules.                                                                                               |
-| Outputs (`environments/dev`)                                                        | `codespaces_vpn_gateway_name`, `codespaces_vpn_gateway_public_ip`, `codespaces_vpn_client_address_pool`, `*_db_fqdn`, etc.                                                                                                                                |
+Two feature flags gate everything:
 
-The gateway is the dominant cost: **VpnGw1AZ is roughly USD 140 / month** at
-the time of writing. Basic SKU does not support OpenVPN, and Azure deprecated
-the non-AZ `VpnGw1/2/3` SKUs for new VPN Gateways in 2026, so `VpnGw1AZ` is
-the floor. Provisioning takes **20–45 minutes** and so does destroy, so flip
-`enable_dev_codespaces_openvpn` on/off deliberately.
+| Flag                            | What it adds                                                                                                                                                         |
+| ------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `enable_dev_codespaces_openvpn` | `GatewaySubnet` + Public IP + VPN Gateway + NSG rule for the client pool.                                                                                            |
+| `enable_dns_private_resolver`   | `dns-inbound-subnet` + DNS Private Resolver + inbound endpoint. Rejected at plan time unless the VPN flag is also `true` (a `check` block in `main.tf` enforces it). |
+
+Resources created when both flags are `true`:
+
+| Resource (Terraform)                                                                       | Purpose                                                                                                                                                                                                |
+| ------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `azurerm_subnet.gateway` (`GatewaySubnet`, `10.0.255.0/27`)                                | Azure-mandated dedicated subnet for the gateway. Name must be exactly `GatewaySubnet`.                                                                                                                 |
+| `azurerm_public_ip.gateway` (Standard, Static, zone-redundant)                             | Public endpoint OpenVPN clients dial into. `lifecycle.ignore_changes = [ip_tags]` keeps Azure's post-create `FirstPartyUsage` tag from churning the PIP.                                               |
+| `azurerm_virtual_network_gateway.main` (`VpnGw1AZ`, `Generation1`, `RouteBased`)           | The P2S gateway. `vpn_client_configuration` enables OpenVPN tunnel type, certificate auth, the `172.16.201.0/24` address pool, and the trusted root.                                                   |
+| `azurerm_subnet.dns_inbound` (`dns-inbound-subnet`, `10.0.4.0/28`)                         | Subnet delegated to `Microsoft.Network/dnsResolvers`, dedicated to the resolver inbound endpoint.                                                                                                      |
+| `azurerm_private_dns_resolver.main` + `azurerm_private_dns_resolver_inbound_endpoint.main` | DNS Private Resolver and its inbound endpoint at `10.0.4.4`, answering for the linked private DNS zones (incl. `privatelink.postgres.database.azure.com`).                                             |
+| `security_rule "AllowPostgreSQLFromAdditionalSources"` (inside `module.networking`)        | Allow tcp/5432 from `172.16.201.0/24` on `db-nsg`. Priority `110`, between the AKS allow (100) and deny-all (4096). Managed inline alongside the existing DB NSG rules.                                |
+| Outputs (`environments/dev`)                                                               | `codespaces_vpn_gateway_name`, `codespaces_vpn_gateway_public_ip`, `codespaces_vpn_client_address_pool`, `dns_resolver_inbound_ip`, `*_db_fqdn`, `key_vault_name`, `postgresql_private_dns_zone_name`. |
+
+Standing it all up takes **30–45 minutes** (the gateway dominates; the
+resolver adds ~5 minutes). Tear-down is the same. Cost is roughly
+**USD 140/month** for `VpnGw1AZ` plus **USD 108/month** for the resolver,
+billed hourly — flip both flags off when you're done.
+
+## Why these choices
+
+### `VpnGw1AZ` (not Basic, not `VpnGw1`)
+
+Basic SKU does not support the OpenVPN tunnel type — only IKEv2 and SSTP.
+Azure deprecated the non-AZ `VpnGw1/2/3` SKUs for **new** VPN Gateways in
+2026 (`NonAzSkusNotAllowedForVPNGateway`); only `VpnGw{1,2,3}AZ` are
+accepted. `VpnGw1AZ` is the cheapest SKU that satisfies both constraints.
+
+### OpenVPN tunnel type (not IKEv2/SSTP)
+
+The Codespaces devcontainer is Linux. Azure's IKEv2 and SSTP clients are
+Windows-first; OpenVPN works on any platform with `openvpn ≥ 2.4`. The
+profile that `az network vnet-gateway vpn-client generate` returns is a
+single-file `.ovpn` we can paste straight into a Codespaces user secret.
+For `openvpn ≥ 2.6` (which the Debian 13 devcontainer ships) we append
+`disable-dco` because Data Channel Offload is not yet compatible with
+Azure VPN Gateway.
+
+### Certificate authentication (not Azure AD, not RADIUS)
+
+Azure AD auth on a P2S gateway requires interactive sign-in via the
+Azure VPN Client — incompatible with a headless codespace. Self-signed
+cert auth is non-interactive: the OpenVPN profile carries everything.
+Per-user client certs let multiple developers share one gateway with
+independent revocation; revoke a user by adding their thumbprint to a
+`vpn_client_configuration.revoked_certificate` block.
+
+### A dedicated `dns-inbound-subnet`
+
+Azure DNS Private Resolver inbound endpoints **must** live in a subnet
+delegated to `Microsoft.Network/dnsResolvers`. That delegation excludes
+other workloads, so the smallest possible subnet (`/28`) keeps address
+space cheap. Keeping the resolver out of the AKS or database subnets
+also avoids surprise NSG conflicts.
+
+### Azure DNS Private Resolver (not the `/etc/hosts` fallback)
+
+Without a resolver, P2S clients sit outside the VNet and cannot reach
+Azure's link-local DNS at `168.63.129.16`; `*.privatelink.postgres.database.azure.com`
+returns `NXDOMAIN`. The fallback is to side-load `/etc/hosts` per
+codespace, which (a) is wiped on every codespace rebuild, (b) does not
+survive PG flex server private-IP changes, and (c) is incompatible with
+`sslmode=verify-full`. The resolver costs ~USD 108/month and removes all
+three problems. We keep the `/etc/hosts` path documented as a fallback
+for when the flag is off, but the resolver is the durable answer.
+
+### A dedicated NSG rule for the VPN client pool
+
+The existing `db-nsg` allows tcp/5432 only from the AKS subnet (`100
+Allow`) and denies everything else (`4096 Deny`). A new rule at
+priority `110` admits the VPN client pool (`172.16.201.0/24`); this is
+the smallest change that grants codespace access without widening the
+AKS rule. The rule lives inline in `module.networking`'s database NSG —
+mixing inline `security_rule` blocks with standalone
+`azurerm_network_security_rule` resources on the same NSG would cause
+azurerm to recreate-then-delete on every apply.
+
+### A Codespaces _user_ secret (not a repo secret)
+
+Repository secrets are visible to anyone who can create a Codespace on
+the repo; user secrets are only visible to the user who created them,
+even when granted to a repo. Since `OPENVPNCONFIG` embeds the client
+private key, a user secret is the correct scope.
 
 ## Files in this branch
 
@@ -117,7 +195,7 @@ the floor. Provisioning takes **20–45 minutes** and so does destroy, so flip
 > `az storage account network-rule add --account-name octoeshoptfstate --ip-address <your IP>`,
 > and revert once the apply finishes.
 
-## Manual local test flow (no CI/CD)
+## How to set everything up
 
 Everything below runs from your laptop / dev workstation. CI/CD is not
 involved at any step.
@@ -199,9 +277,9 @@ The script:
 
 ### 4. Add the Codespaces secret
 
-The secret name is **`OPENVPNCONFIG`** (no underscore — matching the
-referenced article). Use a **user-level** secret (not repo-level) so that
-the secret value is yours alone, then grant it to this repository:
+The secret name is **`OPENVPNCONFIG`** (no underscore). Use a
+**user-level** secret (not repo-level) so the secret value is yours
+alone, then grant it to this repository:
 
 Either via the GitHub web UI:
 
@@ -456,12 +534,3 @@ The OpenVPN log lives at `.ignore/openvpn.log`. The PID lives at
 - **Wire `enable_dev_codespaces_openvpn` and `enable_dns_private_resolver` into `terraform-deploy.yml`** once the manual flow has bedded in. This branch deliberately leaves CI/CD untouched.
 - **`pg_hba.conf`-equivalent IP allow-list** at the database firewall layer for defence in depth (currently only NSG-gated).
 - **Split-DNS via systemd-resolved** so only `*.privatelink.postgres.database.azure.com` (and other VNet-linked private zones) routes through the resolver, while public lookups continue to use the codespace's default DNS. The current implementation replaces `/etc/resolv.conf` for the duration of the tunnel, which means **all** DNS — including unrelated public lookups — flows through the Azure resolver. That's a small DNS-leak/observability concern, not a security flaw, but split-DNS is the cleaner long-term answer.
-
----
-
-## References
-
-- Daniel Meixner, _Connecting Codespaces to Azure VNets via VPN_ — https://danielmeixner.github.io/Codespaces-VPN-Azure/
-- `codespaces-contrib/codespaces-openvpn` — https://github.com/codespaces-contrib/codespaces-openvpn
-- Azure VPN Gateway P2S OpenVPN docs — https://learn.microsoft.com/azure/vpn-gateway/vpn-gateway-howto-openvpn-clients
-- Codespaces — Connecting to a private network — https://docs.github.com/en/codespaces/developing-in-codespaces/connecting-to-a-private-network

@@ -57,3 +57,4 @@ tfplan
 # scripts/generate-codespaces-vpn-cert.sh. The client .pem holds a private
 # key.
 codespaces-vpn-secrets/
+.playwright-mcp/

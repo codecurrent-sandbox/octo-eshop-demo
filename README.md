@@ -6,7 +6,7 @@
 
 A bicycle e-commerce platform built with microservices architecture, deployed on Azure Kubernetes Service.
 
-![Architecture](docs/architecture.png)
+![Architecture](docs/diagrams/architecture.png)
 
 ## Technology Stack
 
