@@ -311,18 +311,24 @@ graph TD
     B --> C[Azure Login<br/>via OIDC]
     C --> D[Setup Terraform ≥1.5]
     D --> E[Set ARM Environment Variables<br/>OIDC + ARM_USE_OIDC=true]
-    E --> F[terraform init<br/>remote backend in Azure Storage]
-    F --> G[terraform plan -out=tfplan]
-    G --> H{Action = apply?}
-    H -->|Yes| I[terraform apply -auto-approve tfplan]
-    I --> J[Sync Secrets to GitHub<br/>Terraform outputs + Key Vault → gh secret set]
-    J --> K[Cluster Setup<br/>ESO + ingress-nginx + ClusterSecretStore]
-    H -->|No| L[Stop after plan]
+    E --> F[Open Terraform data-plane access<br/>tfstate + env Key Vault/Storage]
+    F --> G[terraform init<br/>remote backend in Azure Storage]
+    G --> H[terraform plan -out=tfplan]
+    H --> I{Action = apply?}
+    I -->|Yes| J[terraform apply -auto-approve tfplan]
+    J --> K[Reopen Key Vault access<br/>for secrets sync]
+    K --> L[Sync Secrets to GitHub<br/>Terraform outputs + Key Vault → gh secret set]
+    L --> M[Cluster Setup<br/>ESO + ingress-nginx + ClusterSecretStore]
+    I -->|No| N[Stop after plan]
+    M --> O[Restore data-plane restrictions<br/>always: public access disabled + default deny]
+    N --> O
 
-    style I fill:#FFCDD2
-    style J fill:#CE93D8
-    style K fill:#80DEEA
-    style L fill:#C8E6C9
+    style F fill:#FFF9C4
+    style J fill:#FFCDD2
+    style L fill:#CE93D8
+    style M fill:#80DEEA
+    style N fill:#C8E6C9
+    style O fill:#FFE0B2
 ```
 
 **Authentication:**

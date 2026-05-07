@@ -31,11 +31,18 @@ resource "azurerm_storage_account" "main" {
     }
   }
 
+  network_rules {
+    default_action             = "Allow"
+    bypass                     = ["AzureServices"]
+    ip_rules                   = []
+    virtual_network_subnet_ids = []
+  }
+
   tags = var.tags
 
   lifecycle {
     ignore_changes = [
-      network_rules,
+      network_rules[0].default_action,
       public_network_access_enabled,
     ]
   }

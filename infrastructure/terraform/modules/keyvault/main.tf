@@ -37,7 +37,7 @@ resource "azurerm_key_vault" "main" {
 
   lifecycle {
     ignore_changes = [
-      network_acls,
+      network_acls[0].default_action,
       public_network_access_enabled,
     ]
   }
