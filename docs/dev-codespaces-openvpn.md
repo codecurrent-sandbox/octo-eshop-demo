@@ -163,14 +163,19 @@ gh secret set DEV_DB_PASSWORDS_JSON \
     --body "$DEV_DB_PASSWORDS_JSON"
 ```
 
-The setup script always generates the PostgreSQL VS Code extension profiles from
-Terraform `*_db_fqdn` outputs so server names stay current after the dev
-environment is recreated. When `DEV_DB_PASSWORDS_JSON` is set, it also writes
-`password` and `savePassword: true`; on activation, the extension moves the
-password into VS Code SecretStorage and rewrites the settings file with the
-plaintext `password` field blank. That blank field is expected;
-`savePassword: true` is what makes the extension read the saved SecretStorage
-value.
+The setup script resolves PostgreSQL VS Code extension profile hostnames from
+the first complete source: an optional `DEV_DB_FQDNS_JSON` user secret,
+Terraform `*_db_fqdn` outputs, Azure resource metadata, or recent successful
+`infrastructure.yml` workflow logs from the repository default branch. This
+keeps a fresh Codespace useful even when its local Terraform working directory
+has not been initialized yet. If you use `DEV_DB_FQDNS_JSON`, provide all three
+dev database FQDNs; partial or non-matching values are ignored so saved
+passwords are not paired with unexpected hosts. When `DEV_DB_PASSWORDS_JSON` is
+set, the script also writes `password` and `savePassword: true`; on activation,
+the extension moves the password into VS Code SecretStorage and rewrites the
+settings file with the plaintext `password` field blank. That blank field is
+expected; `savePassword: true` is what makes the extension read the saved
+SecretStorage value.
 
 > Rotate the secret whenever the dev DBs are re-created with new random
 > passwords — re-run the snippet above and the secret value is replaced.
@@ -188,11 +193,11 @@ After the rebuild, two lifecycle hooks fire:
 
 `onCreateCommand` runs `setup-pgsql-credentials.sh` once, before VS Code
 attaches. It materializes a per-codespace `.vscode/settings.json` (mode `600`,
-git-ignored) with PostgreSQL profiles generated from Terraform outputs. When
-`DEV_DB_PASSWORDS_JSON` is set, those profiles also include `password` and
-`savePassword: true`, so the official Microsoft PostgreSQL VS Code extension
-saves the populated passwords to SecretStorage on its first activation — no
-Reload Window required.
+git-ignored) with PostgreSQL profiles resolved from the available dev
+infrastructure metadata. When `DEV_DB_PASSWORDS_JSON` is set, those profiles
+also include `password` and `savePassword: true`, so the official Microsoft
+PostgreSQL VS Code extension saves the populated passwords to SecretStorage on
+its first activation — no Reload Window required.
 
 `postStartCommand` then calls two scripts in sequence:
 
@@ -224,7 +229,7 @@ tunnel automatically. If the resolver is disabled, use a temporary `/etc/hosts`
 entry only as a fallback; it is wiped on rebuild and should not be the default
 path.
 
-### 6. Connect
+### 7. Connect
 
 The devcontainer includes the Microsoft PostgreSQL VS Code extension with dev
 database profiles configured. The VPN must be up before those profiles can
@@ -250,7 +255,7 @@ preconfigured dev profiles. When `DEV_DB_PASSWORDS_JSON` is set, one click
 connects with no password prompt after the extension saves the generated
 profile passwords to SecretStorage.
 
-### 7. Tear down when done
+### 8. Tear down when done
 
 ```bash
 cd infrastructure/terraform/environments/dev
@@ -276,13 +281,14 @@ The rest of the dev environment stays intact.
 
 ## Troubleshooting
 
-| Symptom                                                   | Likely cause                                                                             | Fix                                                                                                             |
-| --------------------------------------------------------- | ---------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
-| `/dev/net/tun` is missing                                 | Codespace was restarted instead of rebuilt after `runArgs` changed.                      | Run **Codespaces: Rebuild Container** or create a fresh Codespace.                                              |
-| `TUNSETIFF: Operation not permitted`                      | `NET_ADMIN` capability is missing.                                                       | Check `.devcontainer/devcontainer.json` and rebuild.                                                            |
-| OpenVPN never reaches `Initialization Sequence Completed` | Gateway still provisioning, profile is stale, or certs do not match the registered root. | Confirm Terraform applied successfully, rebuild the profile, update the user secret, and rebuild the Codespace. |
-| Private database name does not resolve                    | DNS resolver disabled or the VPN profile was built before resolver creation.             | Rebuild the VPN profile after applying the resolver, update the user secret, and rebuild the Codespace.         |
-| Database TCP probe times out                              | Tunnel is down or the database NSG rule was not applied.                                 | Check `.ignore/openvpn.log`, verify `tun0`, and re-run Terraform if needed.                                     |
+| Symptom                                                   | Likely cause                                                                                                                             | Fix                                                                                                                                                           |
+| --------------------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `/dev/net/tun` is missing                                 | Codespace was restarted instead of rebuilt after `runArgs` changed.                                                                      | Run **Codespaces: Rebuild Container** or create a fresh Codespace.                                                                                            |
+| `TUNSETIFF: Operation not permitted`                      | `NET_ADMIN` capability is missing.                                                                                                       | Check `.devcontainer/devcontainer.json` and rebuild.                                                                                                          |
+| OpenVPN never reaches `Initialization Sequence Completed` | Gateway still provisioning, profile is stale, or certs do not match the registered root.                                                 | Confirm Terraform applied successfully, rebuild the profile, update the user secret, and rebuild the Codespace.                                               |
+| PostgreSQL view has no preconfigured dev profiles         | The setup script could not resolve a complete, valid set of database FQDNs from `DEV_DB_FQDNS_JSON`, Terraform, Azure, or workflow logs. | Check `.devcontainer/postcreate/setup-pgsql-credentials.sh` output, sign in to Azure or initialize Terraform, or set all three values in `DEV_DB_FQDNS_JSON`. |
+| Private database name does not resolve                    | DNS resolver disabled or the VPN profile was built before resolver creation.                                                             | Rebuild the VPN profile after applying the resolver, update the user secret, and rebuild the Codespace.                                                       |
+| Database TCP probe times out                              | Tunnel is down or the database NSG rule was not applied.                                                                                 | Check `.ignore/openvpn.log`, verify `tun0`, and re-run Terraform if needed.                                                                                   |
 
 Stop the tunnel manually with:
 
