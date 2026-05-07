@@ -352,11 +352,16 @@ Each environment stores state in the shared Azure Storage Account:
 - Container: `tfstate`
 - Keys: `dev.terraform.tfstate`, `staging.terraform.tfstate`, `production.terraform.tfstate`
 - Authentication: OIDC via Azure AD (no shared keys)
-- Network: GitHub-hosted runners require the storage account public endpoint to
-  be enabled. Access is still restricted by Entra ID/RBAC, shared keys are
-  disabled, and anonymous blob access is disabled. If the backend is moved
-  behind a private endpoint, the Terraform workflow must also move to a
-  private/self-hosted runner with network access to that endpoint.
+- Network: The Terraform backend, environment Key Vaults, and environment
+  storage accounts are kept with public network access disabled after each run.
+  Because the current workflow uses GitHub-hosted runners, `terraform-deploy.yml`
+  temporarily enables public network access for the targeted environment before
+  `terraform init/plan/apply`, then restores public access to disabled and
+  firewall defaults to deny in an `always()` cleanup step.
+  Access is still restricted by Entra ID/RBAC, shared keys are disabled, and
+  anonymous blob access is disabled. If these resources move behind private
+  endpoints, the Terraform workflow must also move to a private/self-hosted
+  runner with network access to those endpoints.
 
 **Optional dev Codespaces private access:**
 

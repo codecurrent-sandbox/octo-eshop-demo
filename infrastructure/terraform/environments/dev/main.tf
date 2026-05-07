@@ -41,15 +41,16 @@ resource "azurerm_resource_group" "main" {
 module "networking" {
   source = "../../modules/networking"
 
-  project_name           = var.project_name
-  environment            = var.environment
-  location               = var.location
-  resource_group_name    = azurerm_resource_group.main.name
-  vnet_address_space     = var.vnet_address_space
-  aks_subnet_prefix      = var.aks_subnet_prefix
-  database_subnet_prefix = var.database_subnet_prefix
-  redis_subnet_prefix    = var.redis_subnet_prefix
-  tags                   = local.common_tags
+  project_name                           = var.project_name
+  environment                            = var.environment
+  location                               = var.location
+  resource_group_name                    = azurerm_resource_group.main.name
+  vnet_address_space                     = var.vnet_address_space
+  aks_subnet_prefix                      = var.aks_subnet_prefix
+  database_subnet_prefix                 = var.database_subnet_prefix
+  redis_subnet_prefix                    = var.redis_subnet_prefix
+  tags                                   = local.common_tags
+  subnet_default_outbound_access_enabled = true
 
   # When the Codespaces OpenVPN tunnel is enabled, allow inbound 5432 from
   # the P2S client address pool. Wired through the networking module so the
@@ -151,15 +152,16 @@ module "postgresql_order" {
 module "redis" {
   source = "../../modules/redis"
 
-  project_name        = var.project_name
-  environment         = var.environment
-  location            = var.location
-  resource_group_name = azurerm_resource_group.main.name
-  sku_name            = var.redis_sku
-  family              = var.redis_family
-  capacity            = var.redis_capacity
-  subnet_id           = module.networking.redis_subnet_id
-  tags                = local.common_tags
+  project_name                            = var.project_name
+  environment                             = var.environment
+  location                                = var.location
+  resource_group_name                     = azurerm_resource_group.main.name
+  sku_name                                = var.redis_sku
+  family                                  = var.redis_family
+  capacity                                = var.redis_capacity
+  subnet_id                               = module.networking.redis_subnet_id
+  active_directory_authentication_enabled = false
+  tags                                    = local.common_tags
 }
 
 module "servicebus" {

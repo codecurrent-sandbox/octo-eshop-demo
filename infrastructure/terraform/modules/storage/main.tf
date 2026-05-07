@@ -32,6 +32,13 @@ resource "azurerm_storage_account" "main" {
   }
 
   tags = var.tags
+
+  lifecycle {
+    ignore_changes = [
+      network_rules,
+      public_network_access_enabled,
+    ]
+  }
 }
 
 resource "azurerm_storage_container" "product_images" {

@@ -103,17 +103,19 @@ resource "azurerm_network_security_group" "redis" {
 }
 
 resource "azurerm_subnet" "aks" {
-  name                 = "${var.project_name}-${var.environment}-aks-subnet"
-  resource_group_name  = var.resource_group_name
-  virtual_network_name = azurerm_virtual_network.main.name
-  address_prefixes     = var.aks_subnet_prefix
+  name                            = "${var.project_name}-${var.environment}-aks-subnet"
+  resource_group_name             = var.resource_group_name
+  virtual_network_name            = azurerm_virtual_network.main.name
+  address_prefixes                = var.aks_subnet_prefix
+  default_outbound_access_enabled = var.subnet_default_outbound_access_enabled
 }
 
 resource "azurerm_subnet" "database" {
-  name                 = "${var.project_name}-${var.environment}-database-subnet"
-  resource_group_name  = var.resource_group_name
-  virtual_network_name = azurerm_virtual_network.main.name
-  address_prefixes     = var.database_subnet_prefix
+  name                            = "${var.project_name}-${var.environment}-database-subnet"
+  resource_group_name             = var.resource_group_name
+  virtual_network_name            = azurerm_virtual_network.main.name
+  address_prefixes                = var.database_subnet_prefix
+  default_outbound_access_enabled = var.subnet_default_outbound_access_enabled
 
   delegation {
     name = "postgresql-flexible-server"
@@ -126,10 +128,11 @@ resource "azurerm_subnet" "database" {
 }
 
 resource "azurerm_subnet" "redis" {
-  name                 = "${var.project_name}-${var.environment}-redis-subnet"
-  resource_group_name  = var.resource_group_name
-  virtual_network_name = azurerm_virtual_network.main.name
-  address_prefixes     = var.redis_subnet_prefix
+  name                            = "${var.project_name}-${var.environment}-redis-subnet"
+  resource_group_name             = var.resource_group_name
+  virtual_network_name            = azurerm_virtual_network.main.name
+  address_prefixes                = var.redis_subnet_prefix
+  default_outbound_access_enabled = var.subnet_default_outbound_access_enabled
 }
 
 resource "azurerm_subnet_network_security_group_association" "aks" {

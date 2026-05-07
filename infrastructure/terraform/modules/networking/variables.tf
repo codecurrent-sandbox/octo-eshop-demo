@@ -49,3 +49,9 @@ variable "database_additional_allow_postgres_source_cidrs" {
   type        = list(string)
   default     = []
 }
+
+variable "subnet_default_outbound_access_enabled" {
+  description = "Whether Azure should provide default outbound access for subnets. Existing dev subnets still use Azure's legacy enabled default, while staging and production have it disabled."
+  type        = bool
+  default     = false
+}

@@ -21,6 +21,9 @@ jobs:
     name: 🌍 Terraform ${{ inputs.action }} (${{ inputs.environment }})
     runs-on: ubuntu-latest
     environment: ${{ inputs.action == 'apply' && inputs.environment || '' }}
+    concurrency:
+      group: terraform-tfstate-access
+      cancel-in-progress: false
     defaults:
       run:
         working-directory: infrastructure/terraform/environments/${{ inputs.environment }}
@@ -46,6 +49,45 @@ jobs:
           echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
           echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
           echo "ARM_USE_OIDC=true" >> $GITHUB_ENV
+
+      - name: Open Terraform data-plane access
+        run: |
+          set -euo pipefail
+
+          ENV_NAME="${{ inputs.environment }}"
+          ENV_RG="octoeshop-${ENV_NAME}-rg"
+
+          echo "Opening Terraform state backend access..."
+          az storage account update \
+            --resource-group octoeshop-tfstate-rg \
+            --name octoeshoptfstate \
+            --public-network-access Enabled \
+            --default-action Allow \
+            --output none
+
+          if ! az group show --name "$ENV_RG" --output none 2>/dev/null; then
+            echo "Resource group $ENV_RG does not exist yet; skipping environment data-plane access."
+            exit 0
+          fi
+
+          echo "Opening Key Vault data-plane access in $ENV_RG..."
+          for vault in $(az keyvault list --resource-group "$ENV_RG" --query '[].name' --output tsv); do
+            az keyvault update \
+              --name "$vault" \
+              --public-network-access Enabled \
+              --default-action Allow \
+              --output none
+          done
+
+          echo "Opening Storage data-plane access in $ENV_RG..."
+          for account in $(az storage account list --resource-group "$ENV_RG" --query '[].name' --output tsv); do
+            az storage account update \
+              --resource-group "$ENV_RG" \
+              --name "$account" \
+              --public-network-access Enabled \
+              --default-action Allow \
+              --output none
+          done
 
       - name: Configure optional dev Terraform inputs
         if: inputs.environment == 'dev'
@@ -106,6 +148,24 @@ jobs:
       - name: Terraform Apply
         if: inputs.action == 'apply'
         run: terraform apply -auto-approve tfplan
+
+      - name: Reopen Key Vault access for secrets sync
+        if: inputs.action == 'apply'
+        run: |
+          set -euo pipefail
+
+          ENV_RG="octoeshop-${{ inputs.environment }}-rg"
+          if ! az group show --name "$ENV_RG" --output none 2>/dev/null; then
+            exit 0
+          fi
+
+          for vault in $(az keyvault list --resource-group "$ENV_RG" --query '[].name' --output tsv); do
+            az keyvault update \
+              --name "$vault" \
+              --public-network-access Enabled \
+              --default-action Allow \
+              --output none
+          done
 
       - name: Sync secrets to GitHub
         if: inputs.action == 'apply'
@@ -176,3 +236,43 @@ jobs:
           set_kv_secret "jwt-secret" "JWT_SECRET"
 
           echo "✅ Secrets sync complete for $ENV"
+
+      - name: Restore Terraform data-plane restrictions
+        if: always()
+        run: |
+          set -euo pipefail
+
+          ENV_NAME="${{ inputs.environment }}"
+          ENV_RG="octoeshop-${ENV_NAME}-rg"
+
+          echo "Restoring Terraform state backend access restrictions..."
+          az storage account update \
+            --resource-group octoeshop-tfstate-rg \
+            --name octoeshoptfstate \
+            --public-network-access Disabled \
+            --default-action Deny \
+            --output none
+
+          if ! az group show --name "$ENV_RG" --output none 2>/dev/null; then
+            echo "Resource group $ENV_RG does not exist; nothing else to restore."
+            exit 0
+          fi
+
+          echo "Restoring Key Vault data-plane access restrictions in $ENV_RG..."
+          for vault in $(az keyvault list --resource-group "$ENV_RG" --query '[].name' --output tsv); do
+            az keyvault update \
+              --name "$vault" \
+              --public-network-access Disabled \
+              --default-action Deny \
+              --output none
+          done
+
+          echo "Restoring Storage data-plane access restrictions in $ENV_RG..."
+          for account in $(az storage account list --resource-group "$ENV_RG" --query '[].name' --output tsv); do
+            az storage account update \
+              --resource-group "$ENV_RG" \
+              --name "$account" \
+              --public-network-access Disabled \
+              --default-action Deny \
+              --output none
+          done

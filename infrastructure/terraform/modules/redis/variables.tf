@@ -40,6 +40,18 @@ variable "subnet_id" {
   nullable    = true
 }
 
+variable "access_keys_authentication_enabled" {
+  description = "Whether Redis access key authentication is enabled. Keep enabled while application configuration is distributed as a Redis access-key connection string."
+  type        = bool
+  default     = true
+}
+
+variable "active_directory_authentication_enabled" {
+  description = "Whether Microsoft Entra authentication is enabled for Redis."
+  type        = bool
+  default     = true
+}
+
 variable "tags" {
   description = "Resource tags"
   type        = map(string)

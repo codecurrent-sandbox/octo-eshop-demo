@@ -127,15 +127,16 @@ module "postgresql_order" {
 module "redis" {
   source = "../../modules/redis"
 
-  project_name        = var.project_name
-  environment         = var.environment
-  location            = var.location
-  resource_group_name = azurerm_resource_group.main.name
-  sku_name            = var.redis_sku
-  family              = var.redis_family
-  capacity            = var.redis_capacity
-  subnet_id           = module.networking.redis_subnet_id
-  tags                = local.common_tags
+  project_name                            = var.project_name
+  environment                             = var.environment
+  location                                = var.location
+  resource_group_name                     = azurerm_resource_group.main.name
+  sku_name                                = var.redis_sku
+  family                                  = var.redis_family
+  capacity                                = var.redis_capacity
+  subnet_id                               = module.networking.redis_subnet_id
+  active_directory_authentication_enabled = true
+  tags                                    = local.common_tags
 }
 
 module "servicebus" {

@@ -11,19 +11,21 @@ locals {
 }
 
 resource "azurerm_redis_cache" "main" {
-  name                = local.cache_name
-  location            = var.location
-  resource_group_name = var.resource_group_name
-  capacity            = var.capacity
-  family              = var.family
-  sku_name            = var.sku_name
+  name                               = local.cache_name
+  location                           = var.location
+  resource_group_name                = var.resource_group_name
+  capacity                           = var.capacity
+  family                             = var.family
+  sku_name                           = var.sku_name
+  access_keys_authentication_enabled = var.access_keys_authentication_enabled
 
   non_ssl_port_enabled = false
   minimum_tls_version  = "1.2"
   subnet_id            = var.sku_name == "Premium" ? var.subnet_id : null
 
   redis_configuration {
-    authentication_enabled = true
+    active_directory_authentication_enabled = var.active_directory_authentication_enabled
+    authentication_enabled                  = true
   }
 
   tags = var.tags

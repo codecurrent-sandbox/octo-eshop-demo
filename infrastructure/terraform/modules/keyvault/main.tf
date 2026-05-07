@@ -34,6 +34,13 @@ resource "azurerm_key_vault" "main" {
   }
 
   tags = var.tags
+
+  lifecycle {
+    ignore_changes = [
+      network_acls,
+      public_network_access_enabled,
+    ]
+  }
 }
 
 resource "azurerm_role_assignment" "aks_keyvault" {
