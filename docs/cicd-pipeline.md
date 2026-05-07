@@ -311,18 +311,24 @@ graph TD
     B --> C[Azure Login<br/>via OIDC]
     C --> D[Setup Terraform ≥1.5]
     D --> E[Set ARM Environment Variables<br/>OIDC + ARM_USE_OIDC=true]
-    E --> F[terraform init<br/>remote backend in Azure Storage]
-    F --> G[terraform plan -out=tfplan]
-    G --> H{Action = apply?}
-    H -->|Yes| I[terraform apply -auto-approve tfplan]
-    I --> J[Sync Secrets to GitHub<br/>Terraform outputs + Key Vault → gh secret set]
-    J --> K[Cluster Setup<br/>ESO + ingress-nginx + ClusterSecretStore]
-    H -->|No| L[Stop after plan]
+    E --> F[Open Terraform data-plane access<br/>tfstate + env Key Vault/Storage]
+    F --> G[terraform init<br/>remote backend in Azure Storage]
+    G --> H[terraform plan -out=tfplan]
+    H --> I{Action = apply?}
+    I -->|Yes| J[terraform apply -auto-approve tfplan]
+    J --> K[Reopen Key Vault access<br/>for secrets sync]
+    K --> L[Sync Secrets to GitHub<br/>Terraform outputs + Key Vault → gh secret set]
+    L --> M[Cluster Setup<br/>ESO + ingress-nginx + ClusterSecretStore]
+    I -->|No| N[Stop after plan]
+    M --> O[Restore data-plane restrictions<br/>always: public access disabled + default deny]
+    N --> O
 
-    style I fill:#FFCDD2
-    style J fill:#CE93D8
-    style K fill:#80DEEA
-    style L fill:#C8E6C9
+    style F fill:#FFF9C4
+    style J fill:#FFCDD2
+    style L fill:#CE93D8
+    style M fill:#80DEEA
+    style N fill:#C8E6C9
+    style O fill:#FFE0B2
 ```
 
 **Authentication:**
@@ -352,11 +358,16 @@ Each environment stores state in the shared Azure Storage Account:
 - Container: `tfstate`
 - Keys: `dev.terraform.tfstate`, `staging.terraform.tfstate`, `production.terraform.tfstate`
 - Authentication: OIDC via Azure AD (no shared keys)
-- Network: GitHub-hosted runners require the storage account public endpoint to
-  be enabled. Access is still restricted by Entra ID/RBAC, shared keys are
-  disabled, and anonymous blob access is disabled. If the backend is moved
-  behind a private endpoint, the Terraform workflow must also move to a
-  private/self-hosted runner with network access to that endpoint.
+- Network: The Terraform backend, environment Key Vaults, and environment
+  storage accounts are kept with public network access disabled after each run.
+  Because the current workflow uses GitHub-hosted runners, `terraform-deploy.yml`
+  temporarily enables public network access for the targeted environment before
+  `terraform init/plan/apply`, then restores public access to disabled and
+  firewall defaults to deny in an `always()` cleanup step.
+  Access is still restricted by Entra ID/RBAC, shared keys are disabled, and
+  anonymous blob access is disabled. If these resources move behind private
+  endpoints, the Terraform workflow must also move to a private/self-hosted
+  runner with network access to those endpoints.
 
 **Optional dev Codespaces private access:**
 

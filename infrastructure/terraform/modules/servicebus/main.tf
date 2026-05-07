@@ -11,11 +11,13 @@ locals {
 }
 
 resource "azurerm_servicebus_namespace" "main" {
-  name                = local.namespace_name
-  location            = var.location
-  resource_group_name = var.resource_group_name
-  sku                 = var.sku
-  tags                = var.tags
+  name                          = local.namespace_name
+  location                      = var.location
+  resource_group_name           = var.resource_group_name
+  sku                           = var.sku
+  local_auth_enabled            = true
+  public_network_access_enabled = true
+  tags                          = var.tags
 }
 
 resource "azurerm_servicebus_queue" "order_created" {
