@@ -245,6 +245,11 @@ jobs:
           ENV_NAME="${{ inputs.environment }}"
           ENV_RG="octoeshop-${ENV_NAME}-rg"
 
+          if ! az account show --output none 2>/dev/null; then
+            echo "Azure CLI is not authenticated; skipping data-plane restore."
+            exit 0
+          fi
+
           echo "Restoring Terraform state backend access restrictions..."
           az storage account update \
             --resource-group octoeshop-tfstate-rg \
