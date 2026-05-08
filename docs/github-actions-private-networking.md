@@ -125,17 +125,23 @@ gh api orgs/codecurrent-sandbox/settings/network-configurations \
 ## Workflow behavior
 
 When `INFRA_RUNNER_PRIVATE_NETWORK=true`, Azure-facing workflows run on
-`INFRA_RUNNER_LABEL` and do not toggle public network access. The Terraform
-workflow fails fast if the runner cannot reach:
+`INFRA_RUNNER_LABEL` and do not toggle public network access. GitHub-hosted
+private runners are injected into the Azure subnet, but Azure private DNS names
+may still resolve publicly on the runner. The Terraform workflow therefore
+hydrates `/etc/hosts` from the Azure Private DNS records before its preflight.
+It then fails fast if the runner cannot reach:
 
 - the `octoeshoptfstate` blob container
 - environment Key Vault secret data plane
 - environment blob storage data plane
 
-When `INFRA_RUNNER_PRIVATE_NETWORK` is unset or not `true`, the workflow keeps
-the previous public GitHub-hosted runner fallback. That fallback temporarily
-opens public network access, waits until the tfstate data plane is reachable,
-then restores public access to disabled/default deny in cleanup.
+When `INFRA_RUNNER_PRIVATE_NETWORK` is unset or not `true`, Azure-facing
+workflows force `ubuntu-latest` and keep the public GitHub-hosted runner
+fallback. That fallback temporarily enables public network access with
+`default-action=Deny`, adds only the current runner public IP to resource
+network rules, waits until the tfstate data plane is reachable, then attempts to
+remove the IP rule and restore public access to disabled/default deny for every
+resource in cleanup.
 
 ## Cutover validation
 

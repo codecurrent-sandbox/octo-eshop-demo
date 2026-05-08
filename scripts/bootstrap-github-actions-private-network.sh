@@ -347,9 +347,21 @@ EXISTING_NETWORK_SETTINGS_BUSINESS_ID=$(az resource show \
   --api-version "$API_VERSION" \
   --query properties.businessId \
   -o tsv 2>/dev/null || true)
+EXISTING_NETWORK_SETTINGS_SUBNET_ID=$(az resource show \
+  --resource-group "$RG_NAME" \
+  --name "$NETWORK_SETTINGS_NAME" \
+  --resource-type GitHub.Network/networkSettings \
+  --api-version "$API_VERSION" \
+  --query properties.subnetId \
+  -o tsv 2>/dev/null || true)
 
-if [[ -n "$EXISTING_NETWORK_SETTINGS_BUSINESS_ID" && "$EXISTING_NETWORK_SETTINGS_BUSINESS_ID" != "$DATABASE_ID" ]]; then
-  echo "Existing network settings resource is bound to businessId $EXISTING_NETWORK_SETTINGS_BUSINESS_ID; recreating it for $DATABASE_ID..."
+if [[ -n "$EXISTING_NETWORK_SETTINGS_BUSINESS_ID" && \
+  ( "$EXISTING_NETWORK_SETTINGS_BUSINESS_ID" != "$DATABASE_ID" || "$EXISTING_NETWORK_SETTINGS_SUBNET_ID" != "$RUNNER_SUBNET_ID" ) ]]; then
+  echo "Existing network settings resource points to a different GitHub owner or subnet; recreating it..."
+  echo "  current businessId: ${EXISTING_NETWORK_SETTINGS_BUSINESS_ID:-<none>}"
+  echo "  desired businessId: $DATABASE_ID"
+  echo "  current subnetId:   ${EXISTING_NETWORK_SETTINGS_SUBNET_ID:-<none>}"
+  echo "  desired subnetId:   $RUNNER_SUBNET_ID"
   az resource delete \
     --resource-group "$RG_NAME" \
     --name "$NETWORK_SETTINGS_NAME" \

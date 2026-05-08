@@ -15,7 +15,7 @@ permissions:
 jobs:
   setup:
     name: ⚙️ Setup Cluster (${{ inputs.environment }})
-    runs-on: ${{ vars.INFRA_RUNNER_LABEL || 'ubuntu-latest' }}
+    runs-on: ${{ vars.INFRA_RUNNER_PRIVATE_NETWORK == 'true' && vars.INFRA_RUNNER_LABEL || 'ubuntu-latest' }}
     environment: ${{ inputs.environment }}
     steps:
       - name: Checkout code

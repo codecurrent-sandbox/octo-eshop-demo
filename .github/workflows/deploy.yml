@@ -33,7 +33,7 @@ permissions:
 jobs:
   deploy:
     name: 🚀 Deploy to ${{ inputs.environment }}
-    runs-on: ${{ vars.INFRA_RUNNER_LABEL || 'ubuntu-latest' }}
+    runs-on: ${{ vars.INFRA_RUNNER_PRIVATE_NETWORK == 'true' && vars.INFRA_RUNNER_LABEL || 'ubuntu-latest' }}
     environment: ${{ inputs.environment }}
     env:
       ACR_REGISTRY: ${{ secrets.ACR_LOGIN_SERVER }}

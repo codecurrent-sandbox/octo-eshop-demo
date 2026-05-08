@@ -176,6 +176,7 @@ jobs:
   deploy-dev:
     name: 🚀 Deploy to Dev
     needs: [resolve-tag, build-push]
+    if: github.ref == 'refs/heads/main'
     uses: ./.github/workflows/deploy.yml
     with:
       environment: dev
