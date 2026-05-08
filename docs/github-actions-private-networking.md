@@ -97,7 +97,11 @@ enterprise level.
 5. Allow this repository to use the runner group. If the repository is public,
    either make it private before using a private-network runner, or explicitly
    enable public repository access for the selected runner group.
-6. Set repository variables:
+6. For public repositories, restrict the runner group to selected workflows only.
+   Use fully qualified workflow references such as
+   `codecurrent-sandbox/octo-eshop-demo/.github/workflows/infrastructure.yml@refs/heads/main`
+   and include the reusable workflows that call the private runner.
+7. Set repository variables:
 
 ```bash
 gh variable set INFRA_RUNNER_LABEL --repo codecurrent-sandbox/octo-eshop-demo --body '<runner-label>'
