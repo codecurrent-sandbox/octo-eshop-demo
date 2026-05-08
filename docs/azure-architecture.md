@@ -78,6 +78,11 @@ The Terraform state backend and GitHub Actions OIDC app are created by a one-tim
 
 This creates the `octoeshop-tfstate-rg` resource group, storage account, and blob container, configures federated credentials for the current GitHub repository, and sets the `AZURE_CLIENT_ID`, `AZURE_TENANT_ID`, and `AZURE_SUBSCRIPTION_ID` secrets in GitHub.
 
+For private data-plane access from GitHub-hosted runners, run
+`scripts/bootstrap-github-actions-private-network.sh` and complete the GitHub
+hosted compute network setup described in
+[GitHub Actions private networking](github-actions-private-networking.md).
+
 ### Provisioning
 
 ```bash
@@ -118,4 +123,4 @@ See [CI/CD Pipeline Documentation](cicd-pipeline.md) for full details.
 - **Registry**: ACR credentials automatically synced to GitHub secrets
 - **Authentication**: GitHub Actions authenticates to Azure with OIDC federated credentials and a service principal with Role Based Access Control Administrator (not User Access Administrator). AKS uses workload identity for passwordless access to Key Vault.
 - **Scanning**: Trivy container vulnerability scanning in CI pipeline
-- **Bootstrap**: One-time `bootstrap-backend.sh` script is the only manual step; all subsequent operations are automated via GitHub Actions
+- **Bootstrap**: `bootstrap-backend.sh` creates the Terraform backend/OIDC app; `bootstrap-github-actions-private-network.sh` prepares the Azure private network for VNet-attached GitHub-hosted runners

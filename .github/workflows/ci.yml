@@ -285,7 +285,7 @@ jobs:
         run: |
           for chart in helm/charts/*/; do
             if [ -f "$chart/Chart.yaml" ]; then
-              echo "Linting $(basename $chart)..."
+              echo "Linting $(basename "$chart")..."
               helm lint "$chart"
             fi
           done

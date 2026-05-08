@@ -19,7 +19,7 @@ permissions:
 jobs:
   terraform:
     name: 🌍 Terraform ${{ inputs.action }} (${{ inputs.environment }})
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.INFRA_RUNNER_LABEL || 'ubuntu-latest' }}
     environment: ${{ inputs.action == 'apply' && inputs.environment || '' }}
     concurrency:
       group: terraform-tfstate-access
@@ -45,17 +45,81 @@ jobs:
 
       - name: Set ARM environment variables
         run: |
-          echo "ARM_CLIENT_ID=${{ secrets.AZURE_CLIENT_ID }}" >> $GITHUB_ENV
-          echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
-          echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
-          echo "ARM_USE_OIDC=true" >> $GITHUB_ENV
+          {
+            echo "ARM_CLIENT_ID=${{ secrets.AZURE_CLIENT_ID }}"
+            echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}"
+            echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+            echo "ARM_USE_OIDC=true"
+          } >> "$GITHUB_ENV"
 
-      - name: Open Terraform data-plane access
+      - name: Verify private Terraform data-plane access
+        if: ${{ vars.INFRA_RUNNER_PRIVATE_NETWORK == 'true' }}
         run: |
           set -euo pipefail
 
           ENV_NAME="${{ inputs.environment }}"
           ENV_RG="octoeshop-${ENV_NAME}-rg"
+
+          echo "Verifying Terraform state backend private access..."
+          az storage blob list \
+            --account-name octoeshoptfstate \
+            --container-name tfstate \
+            --auth-mode login \
+            --query '[].name' \
+            --output none
+
+          if ! az group show --name "$ENV_RG" --output none 2>/dev/null; then
+            echo "Resource group $ENV_RG does not exist yet; skipping environment data-plane checks."
+            exit 0
+          fi
+
+          echo "Verifying Key Vault private access in $ENV_RG..."
+          for vault in $(az keyvault list --resource-group "$ENV_RG" --query '[].name' --output tsv); do
+            az keyvault secret list \
+              --vault-name "$vault" \
+              --query '[].name' \
+              --output none
+          done
+
+          echo "Verifying Storage private access in $ENV_RG..."
+          for account in $(az storage account list --resource-group "$ENV_RG" --query '[].name' --output tsv); do
+            az storage container list \
+              --account-name "$account" \
+              --auth-mode login \
+              --query '[].name' \
+              --output none
+          done
+
+      - name: Open Terraform data-plane access
+        if: ${{ vars.INFRA_RUNNER_PRIVATE_NETWORK != 'true' }}
+        run: |
+          set -euo pipefail
+
+          ENV_NAME="${{ inputs.environment }}"
+          ENV_RG="octoeshop-${ENV_NAME}-rg"
+
+          wait_for_tfstate_access() {
+            local attempt
+
+            for attempt in {1..18}; do
+              if az storage blob list \
+                --account-name octoeshoptfstate \
+                --container-name tfstate \
+                --auth-mode login \
+                --query '[].name' \
+                --output none 2>/tmp/tfstate-access-error.log; then
+                echo "Terraform state backend data-plane access is ready."
+                return 0
+              fi
+
+              echo "Waiting for Terraform state backend data-plane access to propagate (attempt ${attempt}/18)..."
+              sleep 10
+            done
+
+            echo "::error::Terraform state backend data-plane access did not become available after opening public network access."
+            cat /tmp/tfstate-access-error.log
+            return 1
+          }
 
           echo "Opening Terraform state backend access..."
           az storage account update \
@@ -64,6 +128,7 @@ jobs:
             --public-network-access Enabled \
             --default-action Allow \
             --output none
+          wait_for_tfstate_access
 
           if ! az group show --name "$ENV_RG" --output none 2>/dev/null; then
             echo "Resource group $ENV_RG does not exist yet; skipping environment data-plane access."
@@ -150,7 +215,7 @@ jobs:
         run: terraform apply -auto-approve tfplan
 
       - name: Reopen Key Vault access for secrets sync
-        if: inputs.action == 'apply'
+        if: ${{ inputs.action == 'apply' && vars.INFRA_RUNNER_PRIVATE_NETWORK != 'true' }}
         run: |
           set -euo pipefail
 
@@ -238,7 +303,7 @@ jobs:
           echo "✅ Secrets sync complete for $ENV"
 
       - name: Restore Terraform data-plane restrictions
-        if: always()
+        if: ${{ always() && vars.INFRA_RUNNER_PRIVATE_NETWORK != 'true' }}
         run: |
           set -euo pipefail
 

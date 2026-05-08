@@ -33,7 +33,7 @@ permissions:
 jobs:
   deploy:
     name: 🚀 Deploy to ${{ inputs.environment }}
-    runs-on: ubuntu-latest
+    runs-on: ${{ vars.INFRA_RUNNER_LABEL || 'ubuntu-latest' }}
     environment: ${{ inputs.environment }}
     env:
       ACR_REGISTRY: ${{ secrets.ACR_LOGIN_SERVER }}
@@ -51,9 +51,11 @@ jobs:
             exit 1
           fi
 
-          echo "environment=${ENV}" >> "$GITHUB_OUTPUT"
-          echo "image_tag=${TAG}" >> "$GITHUB_OUTPUT"
-          echo "namespace=octo-eshop-${ENV}" >> "$GITHUB_OUTPUT"
+          {
+            echo "environment=${ENV}"
+            echo "image_tag=${TAG}"
+            echo "namespace=octo-eshop-${ENV}"
+          } >> "$GITHUB_OUTPUT"
 
       - name: Azure Login
         uses: azure/login@v2
