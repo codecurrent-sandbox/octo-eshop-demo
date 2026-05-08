@@ -60,7 +60,31 @@ jobs:
           ENV_NAME="${{ inputs.environment }}"
           ENV_RG="octoeshop-${ENV_NAME}-rg"
 
+          require_private_dns() {
+            local host="$1"
+            local ips=()
+
+            mapfile -t ips < <(getent ahostsv4 "$host" | awk '{print $1}' | sort -u)
+            echo "$host resolves to: ${ips[*]:-<none>}"
+
+            if [[ ${#ips[@]} -eq 0 ]]; then
+              echo "::error::$host did not resolve. Check the GitHub runner group network configuration and Azure private DNS zone links."
+              return 1
+            fi
+
+            local ip
+            for ip in "${ips[@]}"; do
+              if [[ "$ip" =~ ^10\. || "$ip" =~ ^192\.168\. || "$ip" =~ ^172\.(1[6-9]|2[0-9]|3[0-1])\. ]]; then
+                return 0
+              fi
+            done
+
+            echo "::error::$host did not resolve to a private endpoint IP. Ensure the GitHub runner group is associated with the Azure private network configuration."
+            return 1
+          }
+
           echo "Verifying Terraform state backend private access..."
+          require_private_dns "octoeshoptfstate.blob.core.windows.net"
           az storage blob list \
             --account-name octoeshoptfstate \
             --container-name tfstate \
@@ -75,6 +99,7 @@ jobs:
 
           echo "Verifying Key Vault private access in $ENV_RG..."
           for vault in $(az keyvault list --resource-group "$ENV_RG" --query '[].name' --output tsv); do
+            require_private_dns "${vault}.vault.azure.net"
             az keyvault secret list \
               --vault-name "$vault" \
               --query '[].name' \
@@ -83,6 +108,7 @@ jobs:
 
           echo "Verifying Storage private access in $ENV_RG..."
           for account in $(az storage account list --resource-group "$ENV_RG" --query '[].name' --output tsv); do
+            require_private_dns "${account}.blob.core.windows.net"
             az storage container list \
               --account-name "$account" \
               --auth-mode login \
