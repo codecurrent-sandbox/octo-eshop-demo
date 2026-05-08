@@ -20,7 +20,7 @@ jobs:
   terraform:
     name: 🌍 Terraform ${{ inputs.action }} (${{ inputs.environment }})
     runs-on: ${{ vars.INFRA_RUNNER_LABEL || 'ubuntu-latest' }}
-    environment: ${{ inputs.action == 'apply' && inputs.environment || '' }}
+    environment: ${{ inputs.environment }}
     concurrency:
       group: terraform-tfstate-access
       cancel-in-progress: false
