@@ -91,10 +91,13 @@ enterprise level.
    - Region: `swedencentral`
    - Virtual network: `octoeshop-ci-vnet`
    - Subnet: `github-runners-subnet`
-3. Create a Linux larger runner or runner group that uses that network
-   configuration.
-4. Allow this repository to use the runner or runner group.
-5. Set repository variables:
+3. Create a Linux larger runner group and, under **Network configurations**,
+   select the Azure private network configuration created in step 2.
+4. Add the Linux larger runner to that runner group.
+5. Allow this repository to use the runner group. If the repository is public,
+   either make it private before using a private-network runner, or explicitly
+   enable public repository access for the selected runner group.
+6. Set repository variables:
 
 ```bash
 gh variable set INFRA_RUNNER_LABEL --repo codecurrent-sandbox/octo-eshop-demo --body '<runner-label>'
@@ -108,6 +111,15 @@ the runner label is already known:
 scripts/bootstrap-github-actions-private-network.sh \
   --github-owner codecurrent-sandbox \
   --runner-label '<runner-label>'
+```
+
+To inspect the GitHub hosted compute network configuration through the REST API,
+the GitHub CLI token needs the network configuration scopes:
+
+```bash
+gh auth refresh -h github.com -s read:network_configurations -s write:network_configurations
+gh api orgs/codecurrent-sandbox/settings/network-configurations \
+  -H 'X-GitHub-Api-Version: 2026-03-10'
 ```
 
 ## Workflow behavior

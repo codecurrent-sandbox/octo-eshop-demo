@@ -52,6 +52,61 @@ jobs:
             echo "ARM_USE_OIDC=true"
           } >> "$GITHUB_ENV"
 
+      - name: Configure private endpoint host resolution
+        if: ${{ vars.INFRA_RUNNER_PRIVATE_NETWORK == 'true' }}
+        run: |
+          set -euo pipefail
+
+          DNS_RG="octoeshop-ci-network-rg"
+          ENV_NAME="${{ inputs.environment }}"
+          ENV_RG="octoeshop-${ENV_NAME}-rg"
+
+          add_private_host() {
+            local zone="$1"
+            local record="$2"
+            local host="$3"
+            local ip
+
+            ip=$(az network private-dns record-set a show \
+              --resource-group "$DNS_RG" \
+              --zone-name "$zone" \
+              --name "$record" \
+              --query 'aRecords[0].ipv4Address' \
+              --output tsv)
+
+            if [[ -z "$ip" || "$ip" == "None" ]]; then
+              echo "::error::No private DNS A record found for $record in $zone."
+              return 1
+            fi
+
+            echo "Mapping $host to $ip"
+            echo "$ip $host" | sudo tee -a /etc/hosts >/dev/null
+          }
+
+          add_private_host \
+            privatelink.blob.core.windows.net \
+            octoeshoptfstate \
+            octoeshoptfstate.blob.core.windows.net
+
+          if ! az group show --name "$ENV_RG" --output none 2>/dev/null; then
+            echo "Resource group $ENV_RG does not exist yet; skipping environment host mappings."
+            exit 0
+          fi
+
+          for vault in $(az keyvault list --resource-group "$ENV_RG" --query '[].name' --output tsv); do
+            add_private_host \
+              privatelink.vaultcore.azure.net \
+              "$vault" \
+              "${vault}.vault.azure.net"
+          done
+
+          for account in $(az storage account list --resource-group "$ENV_RG" --query '[].name' --output tsv); do
+            add_private_host \
+              privatelink.blob.core.windows.net \
+              "$account" \
+              "${account}.blob.core.windows.net"
+          done
+
       - name: Verify private Terraform data-plane access
         if: ${{ vars.INFRA_RUNNER_PRIVATE_NETWORK == 'true' }}
         run: |
