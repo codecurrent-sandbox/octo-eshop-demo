@@ -311,24 +311,31 @@ graph TD
     B --> C[Azure Login<br/>via OIDC]
     C --> D[Setup Terraform ≥1.5]
     D --> E[Set ARM Environment Variables<br/>OIDC + ARM_USE_OIDC=true]
-    E --> F[Open Terraform data-plane access<br/>tfstate + env Key Vault/Storage]
-    F --> G[terraform init<br/>remote backend in Azure Storage]
-    G --> H[terraform plan -out=tfplan]
-    H --> I{Action = apply?}
-    I -->|Yes| J[terraform apply -auto-approve tfplan]
-    J --> K[Reopen Key Vault access<br/>for secrets sync]
-    K --> L[Sync Secrets to GitHub<br/>Terraform outputs + Key Vault → gh secret set]
-    L --> M[Cluster Setup<br/>ESO + ingress-nginx + ClusterSecretStore]
-    I -->|No| N[Stop after plan]
-    M --> O[Restore data-plane restrictions<br/>always: public access disabled + default deny]
-    N --> O
+    E --> F{Private runner enabled?}
+    F -->|Yes| G[Verify private data-plane access<br/>tfstate + env Key Vault/Storage]
+    F -->|No| H[Open public data-plane fallback<br/>tfstate + env Key Vault/Storage]
+    H --> I[Verify tfstate blob access<br/>wait for network rule propagation]
+    G --> J[terraform init<br/>remote backend in Azure Storage]
+    I --> J
+    J --> K[terraform plan -out=tfplan]
+    K --> L{Action = apply?}
+    L -->|Yes| M[terraform apply -auto-approve tfplan]
+    M --> N{Private runner enabled?}
+    N -->|No| O[Reopen Key Vault access<br/>for secrets sync]
+    N -->|Yes| P[Sync Secrets to GitHub<br/>Terraform outputs + Key Vault → gh secret set]
+    O --> P
+    P --> Q[Cluster Setup<br/>ESO + ingress-nginx + ClusterSecretStore]
+    L -->|No| R[Stop after plan]
+    Q --> S[Restore public fallback restrictions<br/>only when fallback opened access]
+    R --> S
 
-    style F fill:#FFF9C4
-    style J fill:#FFCDD2
-    style L fill:#CE93D8
-    style M fill:#80DEEA
-    style N fill:#C8E6C9
-    style O fill:#FFE0B2
+    style G fill:#C8E6C9
+    style H fill:#FFF9C4
+    style M fill:#FFCDD2
+    style P fill:#CE93D8
+    style Q fill:#80DEEA
+    style R fill:#C8E6C9
+    style S fill:#FFE0B2
 ```
 
 **Authentication:**
@@ -358,16 +365,19 @@ Each environment stores state in the shared Azure Storage Account:
 - Container: `tfstate`
 - Keys: `dev.terraform.tfstate`, `staging.terraform.tfstate`, `production.terraform.tfstate`
 - Authentication: OIDC via Azure AD (no shared keys)
-- Network: The Terraform backend, environment Key Vaults, and environment
-  storage accounts are kept with public network access disabled after each run.
-  Because the current workflow uses GitHub-hosted runners, `terraform-deploy.yml`
-  temporarily enables public network access for the targeted environment before
-  `terraform init/plan/apply`, then restores public access to disabled and
-  firewall defaults to deny in an `always()` cleanup step.
-  Access is still restricted by Entra ID/RBAC, shared keys are disabled, and
-  anonymous blob access is disabled. If these resources move behind private
-  endpoints, the Terraform workflow must also move to a private/self-hosted
-  runner with network access to those endpoints.
+- Network: The preferred path is a GitHub-hosted runner attached to the Azure CI
+  VNet through hosted compute networking. Set `INFRA_RUNNER_LABEL` to the private
+  runner label and `INFRA_RUNNER_PRIVATE_NETWORK=true` to make Terraform, cluster
+  setup, deployment, and rollback jobs run from that private network. In this
+  mode the workflow does not toggle public network access; it verifies tfstate,
+  Key Vault, and blob storage data-plane reachability before `terraform init`.
+- Fallback: If `INFRA_RUNNER_PRIVATE_NETWORK` is not `true`, the workflow keeps
+  the temporary public-runner compatibility path. It enables public network
+  access for the targeted data-plane resources, waits until the tfstate container
+  is reachable to avoid Azure Storage firewall propagation races, and restores
+  public access to disabled/default deny in cleanup.
+- Private networking setup is documented in
+  [GitHub Actions private networking](github-actions-private-networking.md).
 
 **Optional dev Codespaces private access:**
 

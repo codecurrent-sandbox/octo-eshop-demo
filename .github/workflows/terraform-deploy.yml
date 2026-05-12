@@ -19,8 +19,9 @@ permissions:
 jobs:
   terraform:
     name: 🌍 Terraform ${{ inputs.action }} (${{ inputs.environment }})
-    runs-on: ubuntu-latest
-    environment: ${{ inputs.action == 'apply' && inputs.environment || '' }}
+    runs-on: ${{ vars.INFRA_RUNNER_PRIVATE_NETWORK == 'true' && vars.INFRA_RUNNER_LABEL || 'ubuntu-latest' }}
+    environment: ${{ (inputs.action == 'apply' || github.event_name == 'workflow_dispatch') && inputs.environment || '' }}
+    timeout-minutes: 90
     concurrency:
       group: terraform-tfstate-access
       cancel-in-progress: false
@@ -45,25 +46,200 @@ jobs:
 
       - name: Set ARM environment variables
         run: |
-          echo "ARM_CLIENT_ID=${{ secrets.AZURE_CLIENT_ID }}" >> $GITHUB_ENV
-          echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}" >> $GITHUB_ENV
-          echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}" >> $GITHUB_ENV
-          echo "ARM_USE_OIDC=true" >> $GITHUB_ENV
+          {
+            echo "ARM_CLIENT_ID=${{ secrets.AZURE_CLIENT_ID }}"
+            echo "ARM_TENANT_ID=${{ secrets.AZURE_TENANT_ID }}"
+            echo "ARM_SUBSCRIPTION_ID=${{ secrets.AZURE_SUBSCRIPTION_ID }}"
+            echo "ARM_USE_OIDC=true"
+          } >> "$GITHUB_ENV"
 
-      - name: Open Terraform data-plane access
+      - name: Configure private endpoint host resolution
+        if: ${{ vars.INFRA_RUNNER_PRIVATE_NETWORK == 'true' }}
+        run: |
+          set -euo pipefail
+
+          DNS_RG="octoeshop-ci-network-rg"
+          ENV_NAME="${{ inputs.environment }}"
+          ENV_RG="octoeshop-${ENV_NAME}-rg"
+
+          add_private_host() {
+            local zone="$1"
+            local record="$2"
+            local host="$3"
+            local ip
+
+            ip=$(az network private-dns record-set a show \
+              --resource-group "$DNS_RG" \
+              --zone-name "$zone" \
+              --name "$record" \
+              --query 'aRecords[0].ipv4Address' \
+              --output tsv)
+
+            if [[ -z "$ip" || "$ip" == "None" ]]; then
+              echo "::error::No private DNS A record found for $record in $zone."
+              return 1
+            fi
+
+            echo "Mapping $host to $ip"
+            echo "$ip $host" | sudo tee -a /etc/hosts >/dev/null
+          }
+
+          add_private_host \
+            privatelink.blob.core.windows.net \
+            octoeshoptfstate \
+            octoeshoptfstate.blob.core.windows.net
+
+          if ! az group show --name "$ENV_RG" --output none 2>/dev/null; then
+            echo "Resource group $ENV_RG does not exist yet; skipping environment host mappings."
+            exit 0
+          fi
+
+          for vault in $(az keyvault list --resource-group "$ENV_RG" --query '[].name' --output tsv); do
+            add_private_host \
+              privatelink.vaultcore.azure.net \
+              "$vault" \
+              "${vault}.vault.azure.net"
+          done
+
+          for account in $(az storage account list --resource-group "$ENV_RG" --query '[].name' --output tsv); do
+            add_private_host \
+              privatelink.blob.core.windows.net \
+              "$account" \
+              "${account}.blob.core.windows.net"
+          done
+
+      - name: Verify private Terraform data-plane access
+        if: ${{ vars.INFRA_RUNNER_PRIVATE_NETWORK == 'true' }}
         run: |
           set -euo pipefail
 
           ENV_NAME="${{ inputs.environment }}"
           ENV_RG="octoeshop-${ENV_NAME}-rg"
 
-          echo "Opening Terraform state backend access..."
-          az storage account update \
-            --resource-group octoeshop-tfstate-rg \
-            --name octoeshoptfstate \
-            --public-network-access Enabled \
-            --default-action Allow \
+          require_private_dns() {
+            local host="$1"
+            local ips=()
+
+            mapfile -t ips < <(getent ahostsv4 "$host" | awk '{print $1}' | sort -u)
+            echo "$host resolves to: ${ips[*]:-<none>}"
+
+            if [[ ${#ips[@]} -eq 0 ]]; then
+              echo "::error::$host did not resolve. Check the GitHub runner group network configuration and Azure private DNS zone links."
+              return 1
+            fi
+
+            local ip
+            for ip in "${ips[@]}"; do
+              if [[ "$ip" =~ ^10\. || "$ip" =~ ^192\.168\. || "$ip" =~ ^172\.(1[6-9]|2[0-9]|3[0-1])\. ]]; then
+                return 0
+              fi
+            done
+
+            echo "::error::$host did not resolve to a private endpoint IP. Ensure the GitHub runner group is associated with the Azure private network configuration."
+            return 1
+          }
+
+          echo "Verifying Terraform state backend private access..."
+          require_private_dns "octoeshoptfstate.blob.core.windows.net"
+          az storage blob list \
+            --account-name octoeshoptfstate \
+            --container-name tfstate \
+            --auth-mode login \
+            --query '[].name' \
             --output none
+
+          if ! az group show --name "$ENV_RG" --output none 2>/dev/null; then
+            echo "Resource group $ENV_RG does not exist yet; skipping environment data-plane checks."
+            exit 0
+          fi
+
+          echo "Verifying Key Vault private access in $ENV_RG..."
+          for vault in $(az keyvault list --resource-group "$ENV_RG" --query '[].name' --output tsv); do
+            require_private_dns "${vault}.vault.azure.net"
+            az keyvault secret list \
+              --vault-name "$vault" \
+              --query '[].name' \
+              --output none
+          done
+
+          echo "Verifying Storage private access in $ENV_RG..."
+          for account in $(az storage account list --resource-group "$ENV_RG" --query '[].name' --output tsv); do
+            require_private_dns "${account}.blob.core.windows.net"
+            az storage container list \
+              --account-name "$account" \
+              --auth-mode login \
+              --query '[].name' \
+              --output none
+          done
+
+      - name: Open Terraform data-plane access
+        if: ${{ vars.INFRA_RUNNER_PRIVATE_NETWORK != 'true' }}
+        run: |
+          set -euo pipefail
+
+          ENV_NAME="${{ inputs.environment }}"
+          ENV_RG="octoeshop-${ENV_NAME}-rg"
+          RUNNER_IP=$(curl -fsS https://api.ipify.org)
+
+          open_storage_account() {
+            local resource_group="$1"
+            local account="$2"
+
+            az storage account update \
+              --resource-group "$resource_group" \
+              --name "$account" \
+              --public-network-access Enabled \
+              --default-action Deny \
+              --output none
+
+            az storage account network-rule add \
+              --resource-group "$resource_group" \
+              --account-name "$account" \
+              --ip-address "$RUNNER_IP" \
+              --output none
+          }
+
+          open_keyvault() {
+            local vault="$1"
+
+            az keyvault update \
+              --name "$vault" \
+              --public-network-access Enabled \
+              --default-action Deny \
+              --output none
+
+            az keyvault network-rule add \
+              --name "$vault" \
+              --ip-address "$RUNNER_IP" \
+              --output none
+          }
+
+          wait_for_tfstate_access() {
+            local attempt
+
+            for attempt in {1..18}; do
+              if az storage blob list \
+                --account-name octoeshoptfstate \
+                --container-name tfstate \
+                --auth-mode login \
+                --query '[].name' \
+                --output none 2>/tmp/tfstate-access-error.log; then
+                echo "Terraform state backend data-plane access is ready."
+                return 0
+              fi
+
+              echo "Waiting for Terraform state backend data-plane access to propagate (attempt ${attempt}/18)..."
+              sleep 10
+            done
+
+            echo "::error::Terraform state backend data-plane access did not become available after opening public network access."
+            cat /tmp/tfstate-access-error.log
+            return 1
+          }
+
+          echo "Opening Terraform state backend access for runner IP $RUNNER_IP..."
+          open_storage_account octoeshop-tfstate-rg octoeshoptfstate
+          wait_for_tfstate_access
 
           if ! az group show --name "$ENV_RG" --output none 2>/dev/null; then
             echo "Resource group $ENV_RG does not exist yet; skipping environment data-plane access."
@@ -72,21 +248,12 @@ jobs:
 
           echo "Opening Key Vault data-plane access in $ENV_RG..."
           for vault in $(az keyvault list --resource-group "$ENV_RG" --query '[].name' --output tsv); do
-            az keyvault update \
-              --name "$vault" \
-              --public-network-access Enabled \
-              --default-action Allow \
-              --output none
+            open_keyvault "$vault"
           done
 
           echo "Opening Storage data-plane access in $ENV_RG..."
           for account in $(az storage account list --resource-group "$ENV_RG" --query '[].name' --output tsv); do
-            az storage account update \
-              --resource-group "$ENV_RG" \
-              --name "$account" \
-              --public-network-access Enabled \
-              --default-action Allow \
-              --output none
+            open_storage_account "$ENV_RG" "$account"
           done
 
       - name: Configure optional dev Terraform inputs
@@ -149,12 +316,126 @@ jobs:
         if: inputs.action == 'apply'
         run: terraform apply -auto-approve tfplan
 
+      - name: Sync private endpoints for applied environment
+        if: ${{ inputs.action == 'apply' && vars.INFRA_RUNNER_PRIVATE_NETWORK == 'true' }}
+        run: |
+          set -euo pipefail
+
+          CI_RG="octoeshop-ci-network-rg"
+          VNET_NAME="octoeshop-ci-vnet"
+          PRIVATE_ENDPOINT_SUBNET_NAME="private-endpoints-subnet"
+          ENV_RG="octoeshop-${{ inputs.environment }}-rg"
+
+          safe_name() {
+            printf '%s' "$1" | tr '[:upper:]' '[:lower:]' | tr -cd 'a-z0-9-' | cut -c1-64
+          }
+
+          ensure_private_endpoint() {
+            local endpoint_name="$1"
+            local target_id="$2"
+            local group_id="$3"
+            local dns_zone="$4"
+            local record="$5"
+            local host="$6"
+            local dns_zone_id
+            local existing_dns_zone_group_id
+            local ip=""
+
+            endpoint_name=$(safe_name "$endpoint_name")
+            dns_zone_id=$(az network private-dns zone show \
+              --resource-group "$CI_RG" \
+              --name "$dns_zone" \
+              --query id \
+              --output tsv)
+
+            if ! az network private-endpoint show \
+              --resource-group "$CI_RG" \
+              --name "$endpoint_name" \
+              --output none 2>/dev/null; then
+              az network private-endpoint create \
+                --resource-group "$CI_RG" \
+                --name "$endpoint_name" \
+                --vnet-name "$VNET_NAME" \
+                --subnet "$PRIVATE_ENDPOINT_SUBNET_NAME" \
+                --private-connection-resource-id "$target_id" \
+                --group-ids "$group_id" \
+                --connection-name "${endpoint_name}-conn" \
+                --output none
+            fi
+
+            existing_dns_zone_group_id=$(az network private-endpoint dns-zone-group show \
+              --resource-group "$CI_RG" \
+              --endpoint-name "$endpoint_name" \
+              --name default \
+              --query id \
+              --output tsv 2>/dev/null || true)
+
+            if [[ -z "$existing_dns_zone_group_id" ]]; then
+              az network private-endpoint dns-zone-group create \
+                --resource-group "$CI_RG" \
+                --endpoint-name "$endpoint_name" \
+                --name default \
+                --private-dns-zone "$dns_zone_id" \
+                --zone-name "$dns_zone" \
+                --output none
+            fi
+
+            for _ in {1..18}; do
+              ip=$(az network private-dns record-set a show \
+                --resource-group "$CI_RG" \
+                --zone-name "$dns_zone" \
+                --name "$record" \
+                --query 'aRecords[0].ipv4Address' \
+                --output tsv 2>/dev/null || true)
+
+              if [[ -n "$ip" && "$ip" != "None" ]]; then
+                echo "Mapping $host to $ip"
+                echo "$ip $host" | sudo tee -a /etc/hosts >/dev/null
+                return 0
+              fi
+
+              sleep 10
+            done
+
+            echo "::error::Private DNS record $record in $dns_zone did not become available."
+            return 1
+          }
+
+          if ! az group show --name "$ENV_RG" --output none 2>/dev/null; then
+            echo "Resource group $ENV_RG does not exist; skipping private endpoint sync."
+            exit 0
+          fi
+
+          for vault in $(az keyvault list --resource-group "$ENV_RG" --query '[].name' --output tsv); do
+            vault_id=$(az keyvault show --name "$vault" --query id --output tsv)
+            ensure_private_endpoint \
+              "pe-${vault}-vault" \
+              "$vault_id" \
+              vault \
+              privatelink.vaultcore.azure.net \
+              "$vault" \
+              "${vault}.vault.azure.net"
+          done
+
+          for account in $(az storage account list --resource-group "$ENV_RG" --query '[].name' --output tsv); do
+            account_id=$(az storage account show --resource-group "$ENV_RG" --name "$account" --query id --output tsv)
+            ensure_private_endpoint \
+              "pe-${account}-blob" \
+              "$account_id" \
+              blob \
+              privatelink.blob.core.windows.net \
+              "$account" \
+              "${account}.blob.core.windows.net"
+          done
+
       - name: Reopen Key Vault access for secrets sync
-        if: inputs.action == 'apply'
+        if: ${{ inputs.action == 'apply' && vars.INFRA_RUNNER_PRIVATE_NETWORK != 'true' }}
         run: |
           set -euo pipefail
 
           ENV_RG="octoeshop-${{ inputs.environment }}-rg"
+          RUNNER_IP=$(curl -fsS https://api.ipify.org)
+
           if ! az group show --name "$ENV_RG" --output none 2>/dev/null; then
             exit 0
           fi
@@ -163,7 +444,12 @@ jobs:
             az keyvault update \
               --name "$vault" \
               --public-network-access Enabled \
-              --default-action Allow \
+              --default-action Deny \
+              --output none
+
+            az keyvault network-rule add \
+              --name "$vault" \
+              --ip-address "$RUNNER_IP" \
               --output none
           done
 
@@ -177,7 +463,7 @@ jobs:
           # Skip if GH_TOKEN is not set
           if [ -z "$GH_TOKEN" ]; then
             echo "⚠️  GH_TOKEN not set — skipping GitHub secrets sync."
-            echo "    Set a GitHub PAT with 'repo' scope as GH_TOKEN secret to enable."
+            echo "    Set a fine-grained GitHub PAT with repository Secrets read/write as GH_TOKEN to enable."
             exit 0
           fi
 
@@ -238,46 +524,85 @@ jobs:
           echo "✅ Secrets sync complete for $ENV"
 
       - name: Restore Terraform data-plane restrictions
-        if: always()
+        if: ${{ always() && vars.INFRA_RUNNER_PRIVATE_NETWORK != 'true' }}
         run: |
           set -euo pipefail
 
           ENV_NAME="${{ inputs.environment }}"
           ENV_RG="octoeshop-${ENV_NAME}-rg"
+          RESTORE_FAILED=0
+          RUNNER_IP=$(curl -fsS https://api.ipify.org || true)
 
           if ! az account show --output none 2>/dev/null; then
             echo "Azure CLI is not authenticated; skipping data-plane restore."
             exit 0
           fi
 
+          try_restore() {
+            local label="$1"
+            shift
+
+            if ! "$@"; then
+              echo "::warning::Failed to $label"
+              RESTORE_FAILED=1
+            fi
+          }
+
+          restore_storage_account() {
+            local resource_group="$1"
+            local account="$2"
+
+            if [[ -n "$RUNNER_IP" ]]; then
+              az storage account network-rule remove \
+                --resource-group "$resource_group" \
+                --account-name "$account" \
+                --ip-address "$RUNNER_IP" \
+                --output none 2>/dev/null || true
+            fi
+
+            try_restore "restore storage account $account restrictions" \
+              az storage account update \
+                --resource-group "$resource_group" \
+                --name "$account" \
+                --public-network-access Disabled \
+                --default-action Deny \
+                --output none
+          }
+
+          restore_keyvault() {
+            local vault="$1"
+
+            if [[ -n "$RUNNER_IP" ]]; then
+              az keyvault network-rule remove \
+                --name "$vault" \
+                --ip-address "$RUNNER_IP" \
+                --output none 2>/dev/null || true
+            fi
+
+            try_restore "restore Key Vault $vault restrictions" \
+              az keyvault update \
+                --name "$vault" \
+                --public-network-access Disabled \
+                --default-action Deny \
+                --output none
+          }
+
           echo "Restoring Terraform state backend access restrictions..."
-          az storage account update \
-            --resource-group octoeshop-tfstate-rg \
-            --name octoeshoptfstate \
-            --public-network-access Disabled \
-            --default-action Deny \
-            --output none
+          restore_storage_account octoeshop-tfstate-rg octoeshoptfstate
 
           if ! az group show --name "$ENV_RG" --output none 2>/dev/null; then
             echo "Resource group $ENV_RG does not exist; nothing else to restore."
-            exit 0
+            exit "$RESTORE_FAILED"
           fi
 
           echo "Restoring Key Vault data-plane access restrictions in $ENV_RG..."
           for vault in $(az keyvault list --resource-group "$ENV_RG" --query '[].name' --output tsv); do
-            az keyvault update \
-              --name "$vault" \
-              --public-network-access Disabled \
-              --default-action Deny \
-              --output none
+            restore_keyvault "$vault"
           done
 
           echo "Restoring Storage data-plane access restrictions in $ENV_RG..."
           for account in $(az storage account list --resource-group "$ENV_RG" --query '[].name' --output tsv); do
-            az storage account update \
-              --resource-group "$ENV_RG" \
-              --name "$account" \
-              --public-network-access Disabled \
-              --default-action Deny \
-              --output none
+            restore_storage_account "$ENV_RG" "$account"
           done
+
+          exit "$RESTORE_FAILED"
