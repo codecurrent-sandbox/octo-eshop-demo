@@ -9,8 +9,9 @@ set -euo pipefail
 #   1. GitHub.Network provider registration
 #   2. Dedicated delegated subnet for GitHub-hosted runners
 #   3. Private endpoint subnet
-#   4. GitHub.Network/networkSettings resource
-#   5. Private DNS zones and private endpoints for tfstate, Key Vault, and blob
+#   4. NAT gateway for runner outbound access to GitHub endpoints
+#   5. GitHub.Network/networkSettings resource
+#   6. Private DNS zones and private endpoints for tfstate, Key Vault, and blob
 #      storage data-plane access
 #
 # The GitHub-side hosted compute network and runner still need to be created by
@@ -25,6 +26,8 @@ VNET_NAME="octoeshop-ci-vnet"
 RUNNER_SUBNET_NAME="github-runners-subnet"
 PRIVATE_ENDPOINT_SUBNET_NAME="private-endpoints-subnet"
 NETWORK_SETTINGS_NAME="octoeshop-github-actions-network"
+NAT_GATEWAY_NAME="octoeshop-ci-runners-nat"
+NAT_PUBLIC_IP_NAME="octoeshop-ci-runners-nat-pip"
 ADDRESS_PREFIX="10.250.0.0/16"
 RUNNER_SUBNET_PREFIX="10.250.1.0/24"
 PRIVATE_ENDPOINT_SUBNET_PREFIX="10.250.2.0/24"
@@ -66,8 +69,12 @@ Options:
                                Delegated runner subnet CIDR
                                (default: 10.250.1.0/24)
   --private-endpoint-subnet-prefix <cidr>
-                               Private endpoint subnet CIDR
-                               (default: 10.250.2.0/24)
+                                Private endpoint subnet CIDR
+                                (default: 10.250.2.0/24)
+  --nat-gateway-name <name>     NAT gateway for runner outbound internet
+                                (default: octoeshop-ci-runners-nat)
+  --nat-public-ip-name <name>   Standard public IP for runner NAT gateway
+                                (default: octoeshop-ci-runners-nat-pip)
 
 Examples:
   scripts/bootstrap-github-actions-private-network.sh \
@@ -98,6 +105,8 @@ while [[ $# -gt 0 ]]; do
     --address-prefix) ADDRESS_PREFIX="$2"; shift 2 ;;
     --runner-subnet-prefix) RUNNER_SUBNET_PREFIX="$2"; shift 2 ;;
     --private-endpoint-subnet-prefix) PRIVATE_ENDPOINT_SUBNET_PREFIX="$2"; shift 2 ;;
+    --nat-gateway-name) NAT_GATEWAY_NAME="$2"; shift 2 ;;
+    --nat-public-ip-name) NAT_PUBLIC_IP_NAME="$2"; shift 2 ;;
     --help|-h) usage 0 ;;
     *) echo "Unknown option: $1"; usage ;;
   esac
@@ -194,6 +203,41 @@ ensure_subnet() {
     --vnet-name "$VNET_NAME" \
     --name "$subnet_name" \
     --address-prefixes "$prefix" \
+    --output none
+}
+
+ensure_runner_outbound_nat() {
+  if ! az network public-ip show \
+    --resource-group "$RG_NAME" \
+    --name "$NAT_PUBLIC_IP_NAME" \
+    --output none 2>/dev/null; then
+    az network public-ip create \
+      --resource-group "$RG_NAME" \
+      --name "$NAT_PUBLIC_IP_NAME" \
+      --location "$LOCATION" \
+      --sku Standard \
+      --allocation-method Static \
+      --output none
+  fi
+
+  if ! az network nat gateway show \
+    --resource-group "$RG_NAME" \
+    --name "$NAT_GATEWAY_NAME" \
+    --output none 2>/dev/null; then
+    az network nat gateway create \
+      --resource-group "$RG_NAME" \
+      --name "$NAT_GATEWAY_NAME" \
+      --location "$LOCATION" \
+      --public-ip-addresses "$NAT_PUBLIC_IP_NAME" \
+      --idle-timeout 10 \
+      --output none
+  fi
+
+  az network vnet subnet update \
+    --resource-group "$RG_NAME" \
+    --vnet-name "$VNET_NAME" \
+    --name "$RUNNER_SUBNET_NAME" \
+    --nat-gateway "$NAT_GATEWAY_NAME" \
     --output none
 }
 
@@ -326,6 +370,9 @@ az network vnet subnet update \
   --name "$PRIVATE_ENDPOINT_SUBNET_NAME" \
   --private-endpoint-network-policies Disabled \
   --output none
+
+echo "Ensuring runner subnet has explicit outbound internet access..."
+ensure_runner_outbound_nat
 
 VNET_ID=$(az network vnet show --resource-group "$RG_NAME" --name "$VNET_NAME" --query id -o tsv)
 RUNNER_SUBNET_ID=$(az network vnet subnet show \

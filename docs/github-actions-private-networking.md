@@ -1,163 +1,227 @@
 # GitHub Actions private networking
 
-This project can run Azure-facing GitHub Actions jobs on GitHub-hosted runners
-attached to an Azure VNet. This removes the need to temporarily enable public
-network access on the Terraform state backend, Key Vaults, or storage accounts.
+This guide explains why the project uses GitHub-hosted runners attached to an
+Azure virtual network, what network resources are created, how traffic flows,
+and how to set up the private runner path.
 
-## Why this is needed
+![GitHub Actions private networking architecture](diagrams/github-actions-private-networking.png)
 
-OIDC and RBAC authenticate the workflow identity, but they do not provide network
-reachability. When an Azure resource has `publicNetworkAccess=Disabled`, a public
-GitHub-hosted runner cannot reach its data plane even with the correct token. A
-VNet-attached runner reaches the resource through private endpoints and private
-DNS while still using short-lived OIDC credentials for authorization.
+## Why this exists
 
-## Azure bootstrap
+OIDC and Azure RBAC prove who the workflow is, but they do not provide network
+reachability. A normal public GitHub-hosted runner cannot access Azure data-plane
+endpoints that are locked down with public network access disabled, even when the
+runner has a valid Azure token.
 
-Run the bootstrap script from a workstation that has Azure and GitHub admin
-permissions. If hosted compute networking is enabled at the organization level,
-bind the Azure `networkSettings` resource to the organization:
+The private networking setup solves that by placing GitHub-hosted runners into a
+dedicated Azure virtual network. From there, the runner can reach private
+endpoints for protected Azure resources while still using short-lived OIDC
+credentials for authorization.
+
+The design keeps two paths separate:
+
+| Path                      | Purpose                                                                     |
+| ------------------------- | --------------------------------------------------------------------------- |
+| Private data-plane path   | Runner to Azure services through private endpoints and private DNS.         |
+| Public control-plane path | Runner to GitHub Actions service endpoints through NAT over outbound HTTPS. |
+
+Both paths are required. Without private endpoints, the runner cannot reach
+locked-down Azure data-plane resources. Without NAT or another explicit outbound
+route, the private runner can join the virtual network but cannot reliably
+connect back to GitHub to start and process jobs.
+
+## What gets deployed
+
+The bootstrap script creates the Azure-side plumbing needed by GitHub hosted
+compute networking:
+
+| Resource type                             | Purpose                                                                                              |
+| ----------------------------------------- | ---------------------------------------------------------------------------------------------------- |
+| Resource group                            | Isolates the CI networking resources from application environments.                                  |
+| Virtual network                           | Hosts private runner network integration and private endpoints.                                      |
+| Delegated runner subnet                   | Subnet delegated to `GitHub.Network/networkSettings`; GitHub injects runner network interfaces here. |
+| Private endpoint subnet                   | Dedicated subnet for private endpoints to protected Azure data-plane services.                       |
+| Standard public IP and NAT gateway        | Gives private runners explicit outbound internet access for GitHub Actions service endpoints.        |
+| `GitHub.Network/networkSettings` resource | Azure resource that binds the delegated subnet to a GitHub organization or enterprise.               |
+| Private DNS zones and VNet links          | Resolves protected service hostnames to private endpoint addresses from inside the CI VNet.          |
+| Private endpoints                         | Private data-plane access to Terraform state storage, environment storage, and secret stores.        |
+
+The GitHub-side setup is completed separately in organization or enterprise
+settings. GitHub uses the Azure network settings ID emitted by the bootstrap
+script to create a hosted compute network configuration, then attaches a larger
+runner group to that network configuration.
+
+## Network flow
+
+![GitHub Actions private runner network flow](diagrams/github-actions-private-network-flow.png)
+
+1. A workflow starts and selects the private runner label when private networking
+   is enabled through repository variables.
+2. GitHub allocates a hosted runner from the private runner group and attaches it
+   to the delegated runner subnet in Azure.
+3. The runner still authenticates to Azure with OIDC. No long-lived Azure
+   credentials are stored on the runner.
+4. Before Terraform runs, the workflow maps protected Azure data-plane hostnames
+   to private endpoint records so the runner uses the private path.
+5. Terraform and Azure CLI data-plane calls reach storage and secret services
+   through private endpoints in the CI virtual network.
+6. The runner uses the NAT gateway for outbound HTTPS back to GitHub Actions
+   endpoints, marketplace actions, and other public control-plane dependencies.
+
+This is why the runner subnet needs both private endpoint reachability and
+explicit outbound internet access.
+
+## Setup
+
+### Prerequisites
+
+- Azure CLI authenticated to the target subscription.
+- GitHub CLI authenticated with permissions to read organization or enterprise
+  metadata and manage repository variables.
+- Permission to register Azure resource providers and create networking
+  resources.
+- Permission to configure GitHub hosted compute networking and larger runner
+  groups at the organization or enterprise level.
+
+For GitHub network configuration API inspection, refresh the GitHub CLI token
+with network configuration scopes:
 
 ```bash
-scripts/bootstrap-github-actions-private-network.sh \
-  --github-owner codecurrent-sandbox
+gh auth refresh -h github.com \
+  -s read:network_configurations \
+  -s write:network_configurations
 ```
 
-If GitHub shows hosted compute networking only at the enterprise level, bind the
-Azure `networkSettings` resource to the enterprise instead:
+### 1. Bootstrap the Azure network
+
+Run the bootstrap script from an admin workstation. Use placeholders for
+environment-specific names rather than relying on public documentation defaults:
 
 ```bash
-gh auth refresh -h github.com -s read:enterprise
-
 scripts/bootstrap-github-actions-private-network.sh \
-  --github-scope enterprise \
-  --github-owner <enterprise-slug>
+  --subscription <azure-subscription-id> \
+  --repo <github-owner>/<repository> \
+  --github-scope org \
+  --github-owner <github-owner> \
+  --location <azure-region> \
+  --resource-group <ci-network-resource-group> \
+  --vnet-name <ci-virtual-network> \
+  --runner-label <private-runner-label>
 ```
 
-If the CLI token cannot get `read:enterprise`, an enterprise owner can look up
-the enterprise database ID and pass it directly:
+If hosted compute networking is managed at the enterprise level, bind the Azure
+network settings resource to the enterprise instead:
 
 ```bash
 scripts/bootstrap-github-actions-private-network.sh \
+  --subscription <azure-subscription-id> \
+  --repo <github-owner>/<repository> \
   --github-scope enterprise \
   --github-owner <enterprise-slug> \
-  --github-database-id <enterprise-database-id>
+  --location <azure-region> \
+  --resource-group <ci-network-resource-group> \
+  --vnet-name <ci-virtual-network> \
+  --runner-label <private-runner-label>
 ```
 
-If you already bootstrapped with the organization ID and GitHub reports "The
-private network is registered to another enterprise or organization", rerun the
-enterprise command above. The script detects the existing org-bound
-`networkSettings` resource, recreates it for the enterprise database ID, and
-prints a new `GitHubId` for the Enterprise UI.
-
-The script creates:
-
-- `octoeshop-ci-network-rg`
-- `octoeshop-ci-vnet`
-- `github-runners-subnet`, delegated to `GitHub.Network/networkSettings`
-- `private-endpoints-subnet`
-- `GitHub.Network/networkSettings` for the selected GitHub organization or
-  enterprise
-- Private DNS zones for `privatelink.blob.core.windows.net` and
-  `privatelink.vaultcore.azure.net`
-- Private endpoints for the tfstate storage account and existing environment
-  Key Vault/blob storage accounts
-
-If the script cannot infer the GitHub organization or enterprise database ID,
-pass it explicitly:
+If the GitHub CLI cannot resolve the organization or enterprise database ID,
+an admin can pass it explicitly:
 
 ```bash
 scripts/bootstrap-github-actions-private-network.sh \
-  --github-scope org \
-  --github-owner codecurrent-sandbox \
-  --github-database-id <database-id>
+  --github-scope <org-or-enterprise> \
+  --github-owner <github-owner-or-enterprise-slug> \
+  --github-database-id <github-database-id>
 ```
 
-The script prints the `GitHubId` from the Azure `networkSettings` resource. Use
-that value when creating the hosted compute network configuration in GitHub.
+At the end, the script prints the GitHub network ID from the Azure
+`GitHub.Network/networkSettings` resource. Save that value for the GitHub hosted
+compute network setup.
 
-## GitHub configuration
+### 2. Configure GitHub hosted compute networking
 
-An organization or enterprise admin must complete the GitHub-side setup. Use the
-Enterprise settings page when GitHub says hosted compute networking is managed at
-enterprise level.
+An organization or enterprise admin completes the GitHub-side configuration:
 
-1. Go to the organization or enterprise hosted compute networking settings.
-2. Create an Azure private network configuration using the `GitHubId` printed by
-   the bootstrap script. If the form asks for Azure details, use:
-   - Resource name: `octoeshop-github-actions-network`
-   - Azure subscription ID: `d9a8811a-4d89-4ba0-bf6e-e9fee0524cae`
-   - Resource group: `octoeshop-ci-network-rg`
-   - Region: `swedencentral`
-   - Virtual network: `octoeshop-ci-vnet`
-   - Subnet: `github-runners-subnet`
-3. Create a Linux larger runner group and, under **Network configurations**,
-   select the Azure private network configuration created in step 2.
-4. Add the Linux larger runner to that runner group.
-5. Allow this repository to use the runner group. If the repository is public,
-   either make it private before using a private-network runner, or explicitly
-   enable public repository access for the selected runner group.
-6. For public repositories, restrict the runner group to selected workflows only.
-   Use fully qualified workflow references such as
-   `codecurrent-sandbox/octo-eshop-demo/.github/workflows/infrastructure.yml@refs/heads/main`
-   and include the reusable workflows that call the private runner.
-7. Set repository variables:
+1. Open hosted compute networking settings in the organization or enterprise.
+2. Create an Azure private network configuration with the GitHub network ID from
+   the bootstrap script.
+3. Create a Linux larger runner group.
+4. Attach the runner group to the Azure private network configuration.
+5. Add a Linux larger runner with the label used by the workflows.
+6. Allow the repository to use the runner group.
+7. For public repositories, restrict the runner group to selected trusted
+   workflows only.
+
+### 3. Set repository variables
+
+The bootstrap script can set these when `--runner-label` and `--repo` are
+provided. They can also be set manually:
 
 ```bash
-gh variable set INFRA_RUNNER_LABEL --repo codecurrent-sandbox/octo-eshop-demo --body '<runner-label>'
-gh variable set INFRA_RUNNER_PRIVATE_NETWORK --repo codecurrent-sandbox/octo-eshop-demo --body 'true'
+gh variable set INFRA_RUNNER_LABEL \
+  --repo <github-owner>/<repository> \
+  --body '<private-runner-label>'
+
+gh variable set INFRA_RUNNER_PRIVATE_NETWORK \
+  --repo <github-owner>/<repository> \
+  --body 'true'
 ```
 
-You can set both variables automatically when rerunning the bootstrap script if
-the runner label is already known:
-
-```bash
-scripts/bootstrap-github-actions-private-network.sh \
-  --github-owner codecurrent-sandbox \
-  --runner-label '<runner-label>'
-```
-
-To inspect the GitHub hosted compute network configuration through the REST API,
-the GitHub CLI token needs the network configuration scopes:
-
-```bash
-gh auth refresh -h github.com -s read:network_configurations -s write:network_configurations
-gh api orgs/codecurrent-sandbox/settings/network-configurations \
-  -H 'X-GitHub-Api-Version: 2026-03-10'
-```
+When `INFRA_RUNNER_PRIVATE_NETWORK=true`, Azure-facing workflows run on
+`INFRA_RUNNER_LABEL` and do not temporarily open public data-plane access.
 
 ## Workflow behavior
 
-When `INFRA_RUNNER_PRIVATE_NETWORK=true`, Azure-facing workflows run on
-`INFRA_RUNNER_LABEL` and do not toggle public network access. GitHub-hosted
-private runners are injected into the Azure subnet, but Azure private DNS names
-may still resolve publicly on the runner. The Terraform workflow therefore
-hydrates `/etc/hosts` from the Azure Private DNS records before its preflight.
-It then fails fast if the runner cannot reach:
+The Terraform workflow has two modes.
 
-- the `octoeshoptfstate` blob container
-- environment Key Vault secret data plane
-- environment blob storage data plane
+| Mode                 | Runner                                                 | Network behavior                                                                                            |
+| -------------------- | ------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------- |
+| Private runner mode  | Private hosted runner label from repository variables. | Uses private endpoints and private DNS for Azure data plane. Public access stays disabled.                  |
+| Public fallback mode | Standard public GitHub-hosted runner.                  | Temporarily enables public access with restricted network rules, then restores restrictions during cleanup. |
 
-When `INFRA_RUNNER_PRIVATE_NETWORK` is unset or not `true`, Azure-facing
-workflows force `ubuntu-latest` and keep the public GitHub-hosted runner
-fallback. That fallback temporarily enables public network access with
-`default-action=Deny`, adds only the current runner public IP to resource
-network rules, waits until the tfstate data plane is reachable, then attempts to
-remove the IP rule and restore public access to disabled/default deny for every
-resource in cleanup.
+In private runner mode, the workflow fails fast if it cannot access:
 
-## Cutover validation
+- Terraform state storage through the private endpoint.
+- Secret store data plane through the private endpoint.
+- Environment storage data plane through the private endpoint.
 
-1. Run the bootstrap script.
-2. Configure the GitHub hosted compute network and runner.
-3. Set `INFRA_RUNNER_LABEL` and `INFRA_RUNNER_PRIVATE_NETWORK=true`.
-4. Run the Infrastructure workflow for `dev` with `action=plan`.
-5. If the private data-plane preflight passes, run `dev` with `action=apply`.
-6. Repeat for `staging` and `production`.
-7. Remove the public-runner fallback once all environments have passed on the
-   private runner path.
+This preflight catches misconfigured runner groups, DNS links, private endpoints,
+or outbound routing before Terraform makes changes.
 
-If new Key Vaults or storage accounts are created outside the existing
-environments, rerun the bootstrap script so it creates the matching private
-endpoints in the CI network.
+## Validation
+
+After setup:
+
+1. Run the infrastructure workflow with `action=plan` for a non-production
+   environment.
+2. Confirm the job starts on the private runner instead of staying queued.
+3. Confirm the private data-plane preflight passes.
+4. Confirm Terraform plan completes successfully.
+5. Repeat for each environment before removing or disabling public-runner
+   fallback behavior.
+
+## Troubleshooting
+
+### Runner stays queued or GitHub reports endpoint connectivity problems
+
+Check the runner subnet outbound path. Private hosted runners need outbound HTTPS
+to GitHub Actions service endpoints. If the runner subnet disables default
+outbound access, attach a NAT gateway or provide an equivalent approved outbound
+route.
+
+### Private data-plane preflight fails
+
+Check these items:
+
+- The GitHub runner group is attached to the expected Azure private network
+  configuration.
+- The Azure network settings resource points at the delegated runner subnet.
+- Private DNS zones are linked to the CI virtual network.
+- Private endpoints exist for the protected storage and secret resources.
+- The workflow can resolve protected service hostnames to private addresses from
+  the runner.
+
+### Terraform plan fails because a backing service is stopped
+
+Private networking can be working correctly while a target Azure service is
+stopped. Start the affected service and rerun the workflow.
