@@ -6,7 +6,7 @@ name: Label automated demo PRs
 
 on:
   pull_request:
-    types: [opened, reopened]
+    types: [opened, reopened, edited, synchronize]
 
 permissions:
   contents: read
@@ -20,6 +20,9 @@ concurrency:
 jobs:
   label:
     runs-on: ubuntu-latest
+    # Skip fork PRs: they get a read-only token, so labeling would 403. Demo PRs are
+    # authored by the coding agent inside this repo, so this never skips a real demo PR.
+    if: github.event.pull_request.head.repo.full_name == github.repository
     steps:
       - name: Add automated-demo label when a linked issue is a demo-candidate
         env:

@@ -56,8 +56,10 @@ Parse the `<item>` entries. For each, capture `title`, `link`, `pubDate`, and th
 
 ## 2. Keep only what's new
 
-Consider **only** items whose `pubDate` is within the **last 7 days** (this workflow runs
-weekly, so that window is the fresh set). Ignore everything older.
+Consider items whose `pubDate` is within the **last 14 days**. (The workflow runs weekly;
+the extra margin means a delayed, skipped, or manually-triggered run doesn't permanently
+miss trailing-edge items. Re-seeing an item is harmless — `deduplicate-by-title` prevents
+duplicate issues.) Ignore anything older than 14 days.
 
 ## 3. Judge demo-fit
 
@@ -82,8 +84,9 @@ Copilot coding agent**, so it must be detailed and self-contained. Use:
 
 - **Title:** `Demo: <feature name>` — concise and unique (used for de-duplication).
 - **Body:** instruct the agent to:
-  - Add a new demo page `demo-site/src/content/docs/demos/NN-slug.mdx`, where `NN` is the
-    next unused two-digit order (existing demos end at `08`; use `09`, then `10`, …) and
+  - Add a new demo page `demo-site/src/content/docs/demos/NN-slug.mdx`. Determine `NN` by
+    **listing `demo-site/src/content/docs/demos/`, finding the highest existing two-digit
+    prefix, and adding 1** (do not hard-code a number — it changes as demos are added).
     `slug` is a short kebab-case name.
   - **Copy the conventions** of an existing demo — point them at
     `demo-site/src/content/docs/demos/04-review-agent.mdx` as the template.
@@ -100,6 +103,9 @@ Copilot coding agent**, so it must be detailed and self-contained. Use:
   - If `demo-site/src/components/home/DemoGrid.astro` hardcodes a demo count in its heading
     (e.g. "Eight demos"), update it to the new total.
   - Keep the change scoped to `demo-site/**` only.
+  - **In the pull request description, include the line `Fixes #<this issue's number>`** so
+    the PR is linked to this issue (the demo-review automation relies on that link to
+    recognize the PR as an automated demo).
   - **Acceptance criteria:** `cd demo-site && npm ci && npm run build` succeeds, and the new
     demo shows up in the home grid and the left navigation.
   - Include the source changelog link: `<link>`, and a one-line summary of the feature.
