@@ -1,0 +1,123 @@
+---
+/**
+ * Tabs — accessible tabbed panels. The tab buttons are generated from the
+ * TabItem panels' data-label at runtime; with JS disabled, panels stack and
+ * remain fully readable.
+ */
+interface Props {
+  label?: string;
+}
+const { label = 'Tabbed content' } = Astro.props;
+---
+
+<div class="tabs" data-tabs>
+  <div class="tab-list" role="tablist" aria-label={label}></div>
+  <div class="tab-panels">
+    <slot />
+  </div>
+</div>
+
+<style>
+  .tabs {
+    margin-block: 1.5rem;
+  }
+  .tab-list {
+    display: none;
+    gap: 0.25rem;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 1.1rem;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .tab-list::-webkit-scrollbar {
+    display: none;
+  }
+  .tabs[data-tabs-ready] .tab-list {
+    display: flex;
+  }
+
+  .tab-list :global(button) {
+    position: relative;
+    padding: 0.6rem 0.9rem;
+    font-weight: 540;
+    font-size: 0.92rem;
+    color: var(--text-muted);
+    white-space: nowrap;
+    border-bottom: 2px solid transparent;
+    margin-bottom: -1px;
+    transition: color var(--dur-1) var(--ease-out-quart);
+  }
+  .tab-list :global(button:hover) {
+    color: var(--ink);
+  }
+  .tab-list :global(button[aria-selected='true']) {
+    color: var(--ink);
+    border-bottom-color: var(--accent);
+  }
+
+  .tab-panels :global(.tab-panel + .tab-panel) {
+    margin-top: 1.5rem;
+  }
+  .tabs[data-tabs-ready] .tab-panels :global(.tab-panel + .tab-panel) {
+    margin-top: 0;
+  }
+</style>
+
+<script>
+  function initTabs(root: HTMLElement) {
+    const list = root.querySelector<HTMLElement>('.tab-list');
+    const panels = Array.from(root.querySelectorAll<HTMLElement>('.tab-panel'));
+    if (!list || panels.length === 0) return;
+
+    const uid = 'tabs-' + Math.random().toString(36).slice(2, 8);
+    const buttons: HTMLButtonElement[] = [];
+
+    panels.forEach((panel, i) => {
+      const label = panel.dataset.label ?? `Tab ${i + 1}`;
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.role = 'tab';
+      btn.id = `${uid}-t${i}`;
+      btn.textContent = label;
+      btn.setAttribute('aria-controls', `${uid}-p${i}`);
+      btn.setAttribute('aria-selected', String(i === 0));
+      btn.tabIndex = i === 0 ? 0 : -1;
+
+      panel.id = `${uid}-p${i}`;
+      panel.setAttribute('aria-labelledby', btn.id);
+      panel.tabIndex = 0;
+      panel.hidden = i !== 0;
+
+      btn.addEventListener('click', () => select(i));
+      list.appendChild(btn);
+      buttons.push(btn);
+    });
+
+    root.setAttribute('data-tabs-ready', '');
+
+    function select(index: number, focus = false) {
+      panels.forEach((p, i) => (p.hidden = i !== index));
+      buttons.forEach((b, i) => {
+        const active = i === index;
+        b.setAttribute('aria-selected', String(active));
+        b.tabIndex = active ? 0 : -1;
+        if (active && focus) b.focus();
+      });
+    }
+
+    list.addEventListener('keydown', (e) => {
+      const idx = buttons.findIndex((b) => b === document.activeElement);
+      if (idx < 0) return;
+      let next = idx;
+      if (e.key === 'ArrowRight') next = (idx + 1) % buttons.length;
+      else if (e.key === 'ArrowLeft') next = (idx - 1 + buttons.length) % buttons.length;
+      else if (e.key === 'Home') next = 0;
+      else if (e.key === 'End') next = buttons.length - 1;
+      else return;
+      e.preventDefault();
+      select(next, true);
+    });
+  }
+
+  document.querySelectorAll<HTMLElement>('[data-tabs]').forEach(initTabs);
+</script>

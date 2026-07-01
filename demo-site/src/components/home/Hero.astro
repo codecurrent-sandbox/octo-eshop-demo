@@ -1,0 +1,418 @@
+---
+import Icon from '../Icon.astro';
+import { SITE, href } from '../../lib/site';
+
+// Representative prompts pulled from the actual demos.
+const exchanges = [
+  {
+    prompt: 'Create an implementation plan for a wishlist-service, consistent with services/*',
+    reply: [
+      { t: 'Analyzing services/* and Prisma conventions…', tone: 'muted' },
+      { t: 'Phase 1 — Schema + Prisma model', tone: 'plan' },
+      { t: 'Phase 2 — REST endpoints + validation', tone: 'plan' },
+      { t: 'Phase 3 — Events, tests, Docker, Helm, CI', tone: 'plan' },
+    ],
+  },
+  {
+    prompt: 'Add health & readiness endpoints to payment-service, with unit tests',
+    reply: [
+      { t: 'Edited 3 files', tone: 'muted' },
+      { t: '+ src/routes/health.ts', tone: 'add' },
+      { t: '+ src/routes/health.test.ts', tone: 'add' },
+      { t: '~ src/app.ts  (wired routes)', tone: 'edit' },
+    ],
+  },
+  {
+    prompt: '@bdd-specialist cover the checkout flow with Gherkin + edge cases',
+    reply: [
+      { t: 'Generated checkout.feature', tone: 'muted' },
+      { t: '5 scenarios · happy path · empty cart', tone: 'plan' },
+      { t: 'out-of-stock · payment failure · a11y', tone: 'plan' },
+    ],
+  },
+];
+const first = exchanges[0];
+---
+
+<section class="hero">
+  <div class="hero__bg" aria-hidden="true">
+    <div class="hero__grid"></div>
+    <div class="hero__aura"></div>
+  </div>
+
+  <div class="container hero__inner">
+    <div class="hero__copy">
+      <p class="hero__badge">
+        <Icon name="sparkles" size={14} />
+        <span>Live demo guide for GitHub Copilot</span>
+      </p>
+      <h1 class="hero__title">Show GitHub Copilot doing real engineering.</h1>
+      <p class="hero__tagline">
+        Eight hands-on demos — planning, coding, review, custom agents, and security — on a
+        production-shaped bicycle e-commerce platform. Copy the prompts, run the tour, wow the room.
+      </p>
+      <div class="hero__actions">
+        <a class="btn btn-primary" href={href('getting-started')}>
+          <Icon name="play" size={16} />
+          <span>Get started</span>
+        </a>
+        <a class="btn btn-ghost" href="#demos">
+          <Icon name="sparkles" size={16} />
+          <span>Explore the demos</span>
+        </a>
+      </div>
+      <p class="hero__meta">
+        <span><Icon name="sparkles" size={13} /> 8 demos</span>
+        <span><Icon name="clock" size={13} /> 20-minute tour</span>
+        <span><Icon name="rocket" size={13} /> Codespaces-ready</span>
+      </p>
+    </div>
+
+    <div class="hero__demo">
+      <div class="terminal" data-terminal>
+        <div class="terminal__bar">
+          <span class="terminal__lights" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="terminal__title">
+            <span class="terminal__mark"><Icon name="sparkles" size={12} /></span>
+            Copilot Chat
+          </span>
+        </div>
+        <div class="terminal__body">
+          <div class="chat">
+            <p class="chat__role">You</p>
+            <p class="chat__prompt" data-prompt>{first.prompt}</p>
+            <p class="chat__role chat__role--ai">
+              <span class="chat__mark"><Icon name="sparkles" size={11} /></span>Copilot
+            </p>
+            <ul class="chat__reply" data-reply>
+              {first.reply.map((line) => <li data-tone={line.tone}>{line.t}</li>)}
+            </ul>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script type="application/json" data-exchanges set:html={JSON.stringify(exchanges)} />
+</section>
+
+<style>
+  .hero {
+    position: relative;
+    overflow: hidden;
+    padding-block: clamp(3.5rem, 4rem + 3vw, 7rem) clamp(3rem, 5vw, 5rem);
+  }
+
+  .hero__bg {
+    position: absolute;
+    inset: 0;
+    z-index: -1;
+    pointer-events: none;
+  }
+  .hero__grid {
+    position: absolute;
+    inset: 0;
+    background-image: linear-gradient(var(--grid-line) 1px, transparent 1px),
+      linear-gradient(90deg, var(--grid-line) 1px, transparent 1px);
+    background-size: 46px 46px;
+    mask-image: radial-gradient(120% 80% at 70% 0%, #000 0%, transparent 65%);
+    -webkit-mask-image: radial-gradient(120% 80% at 70% 0%, #000 0%, transparent 65%);
+    opacity: 0.6;
+  }
+  .hero__aura {
+    position: absolute;
+    top: -30%;
+    right: -10%;
+    width: 70%;
+    height: 90%;
+    background: var(--grad-copilot-soft);
+    opacity: 0.18;
+    filter: blur(80px);
+    border-radius: 50%;
+  }
+
+  .hero__inner {
+    display: grid;
+    grid-template-columns: 1.05fr 0.95fr;
+    gap: clamp(2rem, 5vw, 4rem);
+    align-items: center;
+  }
+
+  .hero__badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.4rem 0.8rem;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border);
+    background: color-mix(in oklab, var(--surface-2) 70%, transparent);
+    color: var(--text-muted);
+    font-size: 0.82rem;
+    font-weight: 520;
+  }
+  .hero__badge :global(svg) {
+    color: var(--accent-fg);
+  }
+
+  .hero__title {
+    margin-top: 1.25rem;
+    font-family: var(--font-display);
+    font-size: clamp(2.4rem, 1.6rem + 4vw, 4.2rem);
+    line-height: 1.02;
+    letter-spacing: -0.035em;
+    max-width: 15ch;
+  }
+  .hero__tagline {
+    margin-top: 1.25rem;
+    font-size: clamp(1.05rem, 1rem + 0.4vw, 1.25rem);
+    line-height: 1.55;
+    color: var(--text-muted);
+    max-width: 52ch;
+    text-wrap: pretty;
+  }
+  .hero__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+    margin-top: 1.9rem;
+  }
+  .hero__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem 1.4rem;
+    margin-top: 1.9rem;
+    color: var(--text-subtle);
+    font-size: 0.86rem;
+    font-family: var(--font-mono);
+  }
+  .hero__meta span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+  }
+  .hero__meta :global(svg) {
+    color: var(--text-muted);
+  }
+
+  /* Terminal */
+  .terminal {
+    border: 1px solid var(--border-strong);
+    border-radius: var(--radius-lg);
+    background: var(--surface-2);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+    max-width: 32rem;
+    margin-inline: auto;
+  }
+  .terminal__bar {
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+    padding: 0.7rem 0.95rem;
+    border-bottom: 1px solid var(--border);
+    background: color-mix(in oklab, var(--bg-inset) 60%, var(--surface));
+  }
+  .terminal__lights {
+    display: inline-flex;
+    gap: 0.4rem;
+  }
+  .terminal__lights i {
+    width: 0.72rem;
+    height: 0.72rem;
+    border-radius: 50%;
+    background: var(--border-strong);
+  }
+  .terminal__lights i:first-child {
+    background: #ff5f57;
+  }
+  .terminal__lights i:nth-child(2) {
+    background: #febc2e;
+  }
+  .terminal__lights i:nth-child(3) {
+    background: #28c840;
+  }
+  .terminal__title {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.45rem;
+    font-size: 0.82rem;
+    font-weight: 550;
+    color: var(--text-muted);
+  }
+  .terminal__mark {
+    display: grid;
+    place-items: center;
+    width: 1.3rem;
+    height: 1.3rem;
+    border-radius: var(--radius-xs);
+    background: var(--grad-copilot);
+    color: #fff;
+  }
+
+  .terminal__body {
+    padding: 1.15rem;
+    min-height: 15.5rem;
+    font-size: 0.9rem;
+  }
+  .chat__role {
+    font-size: 0.72rem;
+    font-weight: 620;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--text-subtle);
+    margin-bottom: 0.35rem;
+  }
+  .chat__role--ai {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-top: 1.1rem;
+    color: var(--accent-fg);
+  }
+  .chat__mark {
+    display: grid;
+    place-items: center;
+    width: 1rem;
+    height: 1rem;
+    border-radius: 3px;
+    background: var(--grad-copilot);
+    color: #fff;
+  }
+  .chat__prompt {
+    color: var(--ink);
+    line-height: 1.5;
+    min-height: 1.5em;
+  }
+  .chat__prompt::after {
+    content: '';
+    display: inline-block;
+    width: 0.55rem;
+    height: 1.05em;
+    margin-left: 2px;
+    vertical-align: text-bottom;
+    background: var(--accent);
+    opacity: 0;
+  }
+  .terminal[data-typing] .chat__prompt::after {
+    opacity: 1;
+    animation: caret 1s steps(1) infinite;
+  }
+  @keyframes caret {
+    50% {
+      opacity: 0;
+    }
+  }
+  .chat__reply {
+    list-style: none;
+    margin: 0.5rem 0 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 0.3rem;
+    font-family: var(--font-mono);
+    font-size: 0.82rem;
+  }
+  .chat__reply li {
+    color: var(--text-muted);
+  }
+  .chat__reply li[data-tone='plan'] {
+    color: var(--accent-fg);
+  }
+  .chat__reply li[data-tone='add'] {
+    color: var(--success);
+  }
+  .chat__reply li[data-tone='edit'] {
+    color: var(--purple);
+  }
+  .chat__reply li[data-tone='muted'] {
+    color: var(--text-subtle);
+  }
+  @media (prefers-reduced-motion: no-preference) {
+    .js .terminal[data-animated] .chat__reply li {
+      opacity: 0;
+      transform: translateY(4px);
+      transition: opacity var(--dur-2) var(--ease-out-quart),
+        transform var(--dur-2) var(--ease-out-quart);
+    }
+    .js .terminal[data-animated] .chat__reply li.is-in {
+      opacity: 1;
+      transform: none;
+    }
+  }
+
+  @media (max-width: 60rem) {
+    .hero__inner {
+      grid-template-columns: 1fr;
+    }
+    .hero__demo {
+      order: -1;
+    }
+    .terminal {
+      max-width: 30rem;
+    }
+  }
+</style>
+
+<script>
+  type Line = { t: string; tone: string };
+  type Exchange = { prompt: string; reply: Line[] };
+
+  const reduce = window.matchMedia('(prefers-reduced-motion: reduce)').matches;
+  const term = document.querySelector<HTMLElement>('[data-terminal]');
+  const dataEl = document.querySelector<HTMLElement>('[data-exchanges]');
+  if (term && dataEl && !reduce) {
+    const exchanges: Exchange[] = JSON.parse(dataEl.textContent || '[]');
+    const promptEl = term.querySelector<HTMLElement>('[data-prompt]')!;
+    const replyEl = term.querySelector<HTMLElement>('[data-reply]')!;
+    term.setAttribute('data-animated', '');
+
+    const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
+    const paused = () => document.hidden;
+    const idle = async () => {
+      while (paused()) await wait(200);
+    };
+
+    async function typeText(text: string) {
+      promptEl.textContent = '';
+      term.setAttribute('data-typing', '');
+      for (const ch of text) {
+        await idle();
+        promptEl.textContent += ch;
+        await wait(16 + Math.random() * 26);
+      }
+      term.removeAttribute('data-typing');
+    }
+
+    async function showReply(lines: Line[]) {
+      replyEl.innerHTML = '';
+      for (const line of lines) {
+        const li = document.createElement('li');
+        li.dataset.tone = line.tone;
+        li.textContent = line.t;
+        replyEl.appendChild(li);
+        await idle();
+        requestAnimationFrame(() => li.classList.add('is-in'));
+        await wait(160);
+      }
+    }
+
+    async function run() {
+      let i = 0;
+      // The first exchange is already server-rendered; start the loop by
+      // re-typing it so the caret/typing effect reads as live.
+      while (true) {
+        const ex = exchanges[i % exchanges.length];
+        await idle();
+        await typeText(ex.prompt);
+        await wait(400);
+        await showReply(ex.reply);
+        await wait(2800);
+        replyEl.querySelectorAll('li').forEach((li) => li.classList.remove('is-in'));
+        await wait(250);
+        i++;
+      }
+    }
+
+    run();
+  }
+</script>

@@ -1,52 +1,39 @@
 import { defineConfig } from 'astro/config';
-import starlight from '@astrojs/starlight';
+import mdx from '@astrojs/mdx';
+import expressiveCode from 'astro-expressive-code';
 
+// Fully custom site — no Starlight. Astro + MDX for content, Expressive Code
+// for GitHub-themed syntax highlighting with a built-in copy button.
 export default defineConfig({
   site: 'https://edinc.github.io',
   base: '/octo-eshop-demo',
+  trailingSlash: 'ignore',
   integrations: [
-    starlight({
-      title: 'Octo E-Shop Demos',
-      social: [
-        {
-          icon: 'github',
-          label: 'GitHub',
-          href: 'https://github.com/edinc/octo-eshop-demo',
+    // Expressive Code must be registered before MDX so it can hook the pipeline.
+    expressiveCode({
+      themes: ['github-dark-default', 'github-light-default'],
+      // Map EC themes to our own [data-theme] toggle instead of a media query.
+      themeCssSelector: theme => `[data-theme='${theme.type}']`,
+      useDarkModeMediaQuery: false,
+      defaultProps: {
+        wrap: true,
+        overridesByLang: {
+          'text,txt': { showLineNumbers: false },
         },
-      ],
-      sidebar: [
-        { label: 'Getting Started', slug: 'getting-started' },
-        {
-          label: 'Demos',
-          items: [
-            { label: 'Plan Agent', slug: 'demos/01-plan-agent' },
-            { label: 'Agents HQ', slug: 'demos/02-agents-hq' },
-            { label: 'Coding Agent', slug: 'demos/03-coding-agent' },
-            { label: 'Review Agent', slug: 'demos/04-review-agent' },
-            { label: 'Custom Agents', slug: 'demos/05-custom-agents' },
-            { label: 'Custom Skills', slug: 'demos/06-custom-skills' },
-            { label: 'Copilot CLI', slug: 'demos/07-copilot-cli' },
-            { label: 'Code Quality', slug: 'demos/08-code-quality' },
-          ],
+      },
+      styleOverrides: {
+        borderRadius: '0.75rem',
+        codeFontFamily:
+          "'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo, Consolas, monospace",
+        codeFontSize: '0.86rem',
+        codeLineHeight: '1.65',
+        uiFontFamily: "'Mona Sans Variable', ui-sans-serif, system-ui, sans-serif",
+        frames: {
+          shadowColor: 'transparent',
+          editorTabBarBorderBottomColor: 'transparent',
         },
-        {
-          label: 'Guides',
-          items: [
-            {
-              label: 'End-to-End Demo (20 min)',
-              slug: 'guides/end-to-end-demo',
-            },
-            { label: 'Presenter Tips', slug: 'guides/presenter-tips' },
-          ],
-        },
-        {
-          label: 'Reference',
-          items: [
-            { label: 'Architecture', slug: 'reference/architecture' },
-            { label: 'CI/CD Pipeline', slug: 'reference/cicd-pipeline' },
-          ],
-        },
-      ],
+      },
     }),
+    mdx(),
   ],
 });

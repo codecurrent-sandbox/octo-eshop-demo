@@ -1,0 +1,100 @@
+---
+import Icon from './Icon.astro';
+import { href } from '../lib/site';
+
+interface Item {
+  id: string;
+  data: { title: string };
+}
+interface Props {
+  prev?: Item;
+  next?: Item;
+}
+const { prev, next } = Astro.props;
+---
+
+{
+  (prev || next) && (
+    <nav class="pager" aria-label="Pagination">
+      {prev ? (
+        <a class="pager__link pager__prev" href={href(prev.id)} rel="prev">
+          <span class="pager__dir">
+            <Icon name="chevron-right" size={15} class="pager__arrow-left" />
+            <span>Previous</span>
+          </span>
+          <span class="pager__title">{prev.data.title}</span>
+        </a>
+      ) : (
+        <span />
+      )}
+      {next && (
+        <a class="pager__link pager__next" href={href(next.id)} rel="next">
+          <span class="pager__dir">
+            <span>Next</span>
+            <Icon name="chevron-right" size={15} />
+          </span>
+          <span class="pager__title">{next.data.title}</span>
+        </a>
+      )}
+    </nav>
+  )
+}
+
+<style>
+  .pager {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1rem;
+    margin-top: 3.5rem;
+    padding-top: 2rem;
+    border-top: 1px solid var(--border-muted);
+  }
+  .pager__link {
+    display: flex;
+    flex-direction: column;
+    gap: 0.35rem;
+    padding: 1rem 1.15rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+    transition: border-color var(--dur-2) var(--ease-out-quart),
+      background var(--dur-2) var(--ease-out-quart), transform var(--dur-2) var(--ease-out-quart);
+  }
+  .pager__link:hover {
+    border-color: var(--border-strong);
+    background: var(--surface-hover);
+    transform: translateY(-2px);
+  }
+  .pager__next {
+    text-align: right;
+    align-items: flex-end;
+  }
+  .pager__dir {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    font-size: 0.78rem;
+    font-weight: 560;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--text-subtle);
+  }
+  .pager__arrow-left {
+    transform: rotate(180deg);
+  }
+  .pager__title {
+    color: var(--ink);
+    font-weight: 580;
+    font-size: 1rem;
+  }
+
+  @media (max-width: 34rem) {
+    .pager {
+      grid-template-columns: 1fr;
+    }
+    .pager__next {
+      text-align: left;
+      align-items: flex-start;
+    }
+  }
+</style>

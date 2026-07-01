@@ -1,0 +1,186 @@
+/* =========================================================================
+   Prose — long-form documentation content styling
+   ========================================================================= */
+
+.prose {
+  color: var(--text);
+  font-size: 1.02rem;
+  line-height: 1.7;
+}
+
+.prose > :first-child {
+  margin-top: 0;
+}
+
+/* Headings */
+.prose h2,
+.prose h3,
+.prose h4 {
+  color: var(--ink);
+  scroll-margin-top: calc(var(--nav-h) + 1.25rem);
+  letter-spacing: -0.02em;
+  position: relative;
+}
+.prose h2 {
+  font-size: clamp(1.45rem, 1.2rem + 1vw, 1.75rem);
+  margin-top: 2.75rem;
+  margin-bottom: 1rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--border-muted);
+}
+.prose h3 {
+  font-size: 1.25rem;
+  margin-top: 2rem;
+  margin-bottom: 0.75rem;
+}
+.prose h4 {
+  font-size: 1.05rem;
+  margin-top: 1.6rem;
+  margin-bottom: 0.6rem;
+}
+
+/* Anchor affordance on hover */
+.prose :is(h2, h3, h4) > a.anchor {
+  position: absolute;
+  left: -1.35rem;
+  padding-right: 0.5rem;
+  color: var(--text-subtle);
+  opacity: 0;
+  text-decoration: none;
+  transition: opacity var(--dur-1) var(--ease-out-quart);
+}
+.prose :is(h2, h3, h4):hover > a.anchor,
+.prose :is(h2, h3, h4) > a.anchor:focus-visible {
+  opacity: 1;
+}
+
+/* Text blocks */
+.prose p,
+.prose ul,
+.prose ol {
+  margin-block: 1rem;
+}
+.prose p {
+  max-width: 72ch;
+  text-wrap: pretty;
+}
+.prose :is(ul, ol) {
+  padding-left: 1.4rem;
+  max-width: 72ch;
+}
+.prose li {
+  margin-block: 0.35rem;
+}
+.prose li::marker {
+  color: var(--text-subtle);
+}
+.prose ul li::marker {
+  color: var(--accent);
+}
+
+.prose strong {
+  color: var(--ink);
+  font-weight: 620;
+}
+.prose em {
+  color: var(--text);
+}
+
+.prose a {
+  color: var(--link);
+  text-decoration: underline;
+  text-decoration-color: color-mix(in oklab, var(--link) 40%, transparent);
+  text-underline-offset: 2px;
+}
+.prose a:hover {
+  text-decoration-color: currentColor;
+}
+
+/* Inline code */
+.prose :not(pre) > code {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  padding: 0.15em 0.4em;
+  border-radius: var(--radius-xs);
+  background: var(--surface-3);
+  border: 1px solid var(--border-muted);
+  color: color-mix(in oklab, var(--accent-fg) 55%, var(--ink));
+  white-space: nowrap;
+}
+
+/* Blockquote */
+.prose blockquote {
+  margin: 1.5rem 0;
+  padding: 0.6rem 1.1rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--text-muted);
+  font-style: italic;
+}
+.prose blockquote > :first-child {
+  margin-top: 0;
+}
+.prose blockquote > :last-child {
+  margin-bottom: 0;
+}
+
+/* Tables */
+.prose .table-wrap {
+  margin-block: 1.5rem;
+  overflow-x: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+.prose table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.92rem;
+}
+.prose thead {
+  background: var(--surface);
+}
+.prose th {
+  text-align: left;
+  font-weight: 600;
+  color: var(--ink);
+  padding: 0.7rem 1rem;
+  white-space: nowrap;
+  border-bottom: 1px solid var(--border);
+}
+.prose td {
+  padding: 0.7rem 1rem;
+  border-bottom: 1px solid var(--border-muted);
+  vertical-align: top;
+}
+.prose tbody tr:last-child td {
+  border-bottom: none;
+}
+.prose tbody tr:hover {
+  background: color-mix(in oklab, var(--surface) 55%, transparent);
+}
+.prose td code {
+  white-space: nowrap;
+}
+
+/* Media */
+.prose img {
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  margin-block: 1.5rem;
+}
+
+.prose hr {
+  margin-block: 2.5rem;
+}
+
+.prose kbd {
+  font-family: var(--font-mono);
+  font-size: 0.8em;
+  padding: 0.15em 0.45em;
+  border-radius: var(--radius-xs);
+  border: 1px solid var(--border-strong);
+  border-bottom-width: 2px;
+  background: var(--surface-2);
+  color: var(--ink);
+}

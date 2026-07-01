@@ -1,0 +1,119 @@
+---
+import Icon from '../Icon.astro';
+
+const layers = [
+  { icon: 'layout', label: 'Frontend', items: ['React', 'Vite', 'Tailwind CSS', 'Redux Toolkit'] },
+  { icon: 'server', label: 'Backend', items: ['Node.js', 'TypeScript', 'Express'] },
+  { icon: 'database', label: 'Data', items: ['PostgreSQL', 'Prisma', 'Redis'] },
+  { icon: 'cloud', label: 'Infrastructure', items: ['Azure AKS', 'Terraform'] },
+  { icon: 'git-branch', label: 'CI / CD', items: ['GitHub Actions', 'Helm'] },
+  { icon: 'network', label: 'Architecture', items: ['6 microservices', 'Service Bus events'] },
+];
+---
+
+<section class="stack">
+  <div class="container">
+    <div class="stack__head" data-reveal>
+      <h2>A production-shaped platform, not a toy</h2>
+      <p>
+        Copilot works best when there's real structure to reason about. Octo E-Shop is a full bicycle
+        storefront — six microservices, real infrastructure, real CI — so every demo lands on
+        genuine, non-trivial code.
+      </p>
+    </div>
+    <div class="stack__grid">
+      {
+        layers.map((layer) => (
+          <div class="stack__layer" data-reveal>
+            <div class="stack__layer-head">
+              <span class="stack__icon">
+                <Icon name={layer.icon} size={18} />
+              </span>
+              <span class="stack__label">{layer.label}</span>
+            </div>
+            <ul class="stack__chips">
+              {layer.items.map((item) => (
+                <li>{item}</li>
+              ))}
+            </ul>
+          </div>
+        ))
+      }
+    </div>
+  </div>
+</section>
+
+<style>
+  .stack {
+    padding-block: clamp(3rem, 5vw, 5rem);
+    border-top: 1px solid var(--border-muted);
+    background: var(--bg-inset);
+  }
+  .stack__head {
+    max-width: 46rem;
+    margin-bottom: 2.5rem;
+  }
+  .stack__head h2 {
+    font-family: var(--font-display);
+    font-size: clamp(1.8rem, 1.4rem + 2vw, 2.5rem);
+    letter-spacing: -0.025em;
+    line-height: 1.1;
+  }
+  .stack__head p {
+    margin-top: 0.9rem;
+    font-size: 1.08rem;
+    color: var(--text-muted);
+    max-width: 62ch;
+    text-wrap: pretty;
+  }
+
+  .stack__grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 15rem), 1fr));
+    gap: 1rem;
+  }
+  .stack__layer {
+    padding: 1.15rem 1.25rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+  }
+  .stack__layer-head {
+    display: flex;
+    align-items: center;
+    gap: 0.6rem;
+    margin-bottom: 0.85rem;
+  }
+  .stack__icon {
+    display: grid;
+    place-items: center;
+    width: 2.1rem;
+    height: 2.1rem;
+    border-radius: var(--radius-sm);
+    color: var(--purple);
+    background: var(--purple-wash);
+    border: 1px solid color-mix(in oklab, var(--purple) 30%, transparent);
+  }
+  .stack__label {
+    font-weight: 600;
+    color: var(--ink);
+    font-size: 1rem;
+  }
+  .stack__chips {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .stack__chips li {
+    font-family: var(--font-mono);
+    font-size: 0.76rem;
+    padding: 0.28rem 0.55rem;
+    border-radius: var(--radius-xs);
+    background: var(--surface-3);
+    border: 1px solid var(--border-muted);
+    color: var(--text-muted);
+  }
+</style>

@@ -1,0 +1,160 @@
+---
+import Icon from '../Icon.astro';
+import { href } from '../../lib/site';
+import type { CollectionEntry } from 'astro:content';
+
+interface Props {
+  entry: CollectionEntry<'docs'>;
+  index: number;
+}
+const { entry, index } = Astro.props;
+const { title, summary, description, capability, duration, difficulty, icon } = entry.data;
+const num = String(index).padStart(2, '0');
+---
+
+<a
+  class="demo-card"
+  href={href(entry.id)}
+  data-reveal
+  style={`--reveal-delay:${Math.min(index, 6) * 45}ms`}
+>
+  <div class="demo-card__head">
+    <span class="demo-card__icon"><Icon name={icon ?? 'sparkles'} size={20} /></span>
+    <span class="demo-card__num">{num}</span>
+  </div>
+  <h3 class="demo-card__title">{title}</h3>
+  <p class="demo-card__desc">{summary ?? description}</p>
+  <div class="demo-card__foot">
+    <div class="demo-card__meta">
+      {
+        difficulty && (
+          <span class="pill" data-level={difficulty}>
+            <Icon name="gauge" size={12} />
+            {difficulty}
+          </span>
+        )
+      }
+      {
+        duration && (
+          <span class="pill">
+            <Icon name="clock" size={12} />
+            {duration}
+          </span>
+        )
+      }
+    </div>
+    <span class="demo-card__go" aria-hidden="true"><Icon name="arrow-right" size={16} /></span>
+  </div>
+</a>
+
+<style>
+  .demo-card {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+    padding: 1.35rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    color: var(--text);
+    overflow: hidden;
+    transition: transform var(--dur-2) var(--ease-out-quart),
+      border-color var(--dur-2) var(--ease-out-quart), box-shadow var(--dur-2) var(--ease-out-quart),
+      background var(--dur-2) var(--ease-out-quart);
+  }
+  /* accent glow that fades in on hover */
+  .demo-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(140deg, var(--accent), transparent 45%);
+    -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+    -webkit-mask-composite: xor;
+    mask-composite: exclude;
+    opacity: 0;
+    transition: opacity var(--dur-2) var(--ease-out-quart);
+    pointer-events: none;
+  }
+  .demo-card:hover {
+    transform: translateY(-4px);
+    border-color: transparent;
+    background: var(--surface-2);
+    box-shadow: var(--shadow-md);
+  }
+  .demo-card:hover::before {
+    opacity: 1;
+  }
+
+  .demo-card__head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  .demo-card__icon {
+    display: grid;
+    place-items: center;
+    width: 2.6rem;
+    height: 2.6rem;
+    border-radius: var(--radius);
+    color: var(--accent-fg);
+    background: var(--accent-wash);
+    border: 1px solid color-mix(in oklab, var(--accent) 30%, transparent);
+    transition: color var(--dur-2) var(--ease-out-quart),
+      background var(--dur-2) var(--ease-out-quart);
+  }
+  .demo-card:hover .demo-card__icon {
+    color: #fff;
+    background: var(--grad-copilot);
+    border-color: transparent;
+  }
+  .demo-card__num {
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: var(--text-subtle);
+  }
+
+  .demo-card__title {
+    font-size: 1.15rem;
+    font-weight: 600;
+    letter-spacing: -0.015em;
+    color: var(--ink);
+  }
+  .demo-card__desc {
+    font-size: 0.92rem;
+    color: var(--text-muted);
+    line-height: 1.55;
+    flex-grow: 1;
+  }
+
+  .demo-card__foot {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 0.6rem;
+    margin-top: 0.35rem;
+  }
+  .demo-card__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.4rem;
+  }
+  .demo-card__go {
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    flex-shrink: 0;
+    border-radius: var(--radius-full);
+    color: var(--text-subtle);
+    transition: transform var(--dur-2) var(--ease-out-quart),
+      color var(--dur-2) var(--ease-out-quart);
+  }
+  .demo-card:hover .demo-card__go {
+    color: var(--accent-fg);
+    transform: translateX(3px);
+  }
+</style>

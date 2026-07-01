@@ -2,19 +2,21 @@
 draft: false
 title: Getting Started
 description: Set up your environment to run the Octo E-Shop Copilot demos.
+category: Getting Started
+order: 1
+icon: play
+summary: Set up Codespaces or a local environment in a couple of minutes.
 ---
-
-import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
 ## Prerequisites
 
 - GitHub account with [Copilot](https://github.com/features/copilot) access
 - VS Code with the [GitHub Copilot extension](https://marketplace.visualstudio.com/items?itemName=GitHub.copilot)
-- [GitHub Copilot CLI](https://docs.github.com/en/copilot/using-github-copilot/using-github-copilot-in-the-command-line) (for CLI demos)
+- [GitHub Copilot CLI](https://docs.github.com/en/copilot/how-tos/copilot-cli/set-up-copilot-cli/install-copilot-cli) (for CLI demos)
 
 ## Launch the Environment
 
-<Tabs>
+<Tabs label="Setup method">
   <TabItem label="Codespaces (Recommended)">
     The fastest way to get started — everything is pre-configured.
 
@@ -23,7 +25,7 @@ import { Steps, Tabs, TabItem } from '@astrojs/starlight/components';
 
          [![Open in GitHub Codespaces](https://github.com/codespaces/badge.svg)](https://codespaces.new/edinc/octo-eshop-demo)
 
-      2. Wait for the devcontainer to build (includes Node 20, Docker, GitHub CLI, kubectl, Helm, Terraform, Azure CLI).
+      2. Wait for the devcontainer to build (includes Node 22, Docker, GitHub CLI, kubectl, Helm, Terraform, Azure CLI).
 
       3. Start databases and services:
 

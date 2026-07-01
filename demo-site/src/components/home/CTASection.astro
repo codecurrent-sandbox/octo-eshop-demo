@@ -1,0 +1,89 @@
+---
+import Icon from '../Icon.astro';
+import { SITE, href } from '../../lib/site';
+---
+
+<section class="cta">
+  <div class="container">
+    <div class="cta__panel" data-reveal>
+      <div class="cta__aura" aria-hidden="true"></div>
+      <div class="cta__content">
+        <h2>Ready to show Copilot in action?</h2>
+        <p>
+          Launch the entire platform in a preconfigured Codespace and start demoing in minutes — no
+          local setup required.
+        </p>
+        <div class="cta__actions">
+          <a class="btn btn-primary" href={SITE.codespaces} target="_blank" rel="noreferrer noopener">
+            <Icon name="rocket" size={16} />
+            <span>Open in Codespaces</span>
+          </a>
+          <a class="btn btn-ghost" href={href('getting-started')}>
+            <Icon name="play" size={16} />
+            <span>Get started</span>
+          </a>
+          <a class="btn btn-ghost" href={SITE.repo} target="_blank" rel="noreferrer noopener">
+            <Icon name="github" size={16} />
+            <span>View the repo</span>
+          </a>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<style>
+  .cta {
+    padding-block: clamp(1rem, 3vw, 2.5rem) clamp(3rem, 6vw, 5rem);
+  }
+  .cta__panel {
+    position: relative;
+    overflow: hidden;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-xl);
+    background: var(--surface);
+    padding: clamp(2rem, 5vw, 4rem);
+    isolation: isolate;
+  }
+  .cta__aura {
+    position: absolute;
+    inset: -40% -10% auto -10%;
+    height: 130%;
+    background: var(--grad-copilot-soft);
+    opacity: 0.16;
+    filter: blur(60px);
+    z-index: -1;
+    pointer-events: none;
+  }
+  .cta__panel::after {
+    content: '';
+    position: absolute;
+    inset-inline: 0;
+    top: 0;
+    height: 2px;
+    background: var(--grad-copilot);
+    opacity: 0.8;
+  }
+  .cta__content {
+    max-width: 44rem;
+  }
+  .cta h2 {
+    font-family: var(--font-display);
+    font-size: clamp(1.9rem, 1.4rem + 2.4vw, 2.9rem);
+    letter-spacing: -0.03em;
+    line-height: 1.05;
+  }
+  .cta p {
+    margin-top: 0.9rem;
+    font-size: 1.12rem;
+    color: var(--text-muted);
+    max-width: 52ch;
+    text-wrap: pretty;
+  }
+  .cta__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+    margin-top: 1.8rem;
+  }
+</style>

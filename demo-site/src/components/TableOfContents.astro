@@ -1,0 +1,101 @@
+---
+import type { MarkdownHeading } from 'astro';
+
+interface Props {
+  headings: MarkdownHeading[];
+}
+const { headings } = Astro.props;
+const items = headings.filter((h) => h.depth >= 2 && h.depth <= 3);
+---
+
+{
+  items.length > 0 && (
+    <nav class="toc" aria-label="On this page">
+      <p class="toc__title">On this page</p>
+      <ul>
+        {items.map((h) => (
+          <li class={`toc__item toc__item--h${h.depth}`}>
+            <a href={`#${h.slug}`} data-toc-link={h.slug}>
+              {h.text}
+            </a>
+          </li>
+        ))}
+      </ul>
+    </nav>
+  )
+}
+
+<style>
+  .toc {
+    font-size: 0.85rem;
+  }
+  .toc__title {
+    font-size: 0.72rem;
+    font-weight: 620;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--text-subtle);
+    margin-bottom: 0.7rem;
+  }
+  .toc ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    border-left: 1px solid var(--border-muted);
+  }
+  .toc__item a {
+    display: block;
+    padding: 0.32rem 0.85rem;
+    margin-left: -1px;
+    border-left: 1px solid transparent;
+    color: var(--text-muted);
+    line-height: 1.4;
+    transition: color var(--dur-1) var(--ease-out-quart),
+      border-color var(--dur-1) var(--ease-out-quart);
+  }
+  .toc__item--h3 a {
+    padding-left: 1.6rem;
+    font-size: 0.82rem;
+  }
+  .toc__item a:hover {
+    color: var(--ink);
+  }
+  .toc__item a[aria-current='true'] {
+    color: var(--accent-fg);
+    border-left-color: var(--accent);
+    font-weight: 540;
+  }
+</style>
+
+<script>
+  const links = Array.from(document.querySelectorAll<HTMLAnchorElement>('[data-toc-link]'));
+  if (links.length > 0) {
+    const bySlug = new Map(links.map((l) => [l.dataset.tocLink, l]));
+    const targets = links
+      .map((l) => document.getElementById(l.dataset.tocLink ?? ''))
+      .filter((el): el is HTMLElement => Boolean(el));
+
+    let current: HTMLAnchorElement | null = null;
+    const setActive = (slug: string | undefined) => {
+      const link = slug ? bySlug.get(slug) : null;
+      if (link === current) return;
+      current?.removeAttribute('aria-current');
+      if (link) link.setAttribute('aria-current', 'true');
+      current = link ?? null;
+    };
+
+    const observer = new IntersectionObserver(
+      (entries) => {
+        const visible = entries
+          .filter((e) => e.isIntersecting)
+          .sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible[0]) setActive(visible[0].target.id);
+      },
+      { rootMargin: '-15% 0px -70% 0px', threshold: 0 }
+    );
+    targets.forEach((t) => observer.observe(t));
+  }
+</script>

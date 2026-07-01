@@ -1,0 +1,74 @@
+---
+/**
+ * Steps — styles an ordered list (authored as markdown inside the component)
+ * into a connected, numbered sequence. Blank lines around the list are
+ * required so MDX parses it as a real <ol>.
+ */
+---
+
+<div class="steps">
+  <slot />
+</div>
+
+<style>
+  .steps :global(ol) {
+    list-style: none;
+    counter-reset: step;
+    padding: 0;
+    margin: 1.4rem 0;
+    display: flex;
+    flex-direction: column;
+  }
+
+  .steps :global(ol > li) {
+    position: relative;
+    padding-left: 3rem;
+    padding-bottom: 1.6rem;
+    min-height: 2rem;
+  }
+  .steps :global(ol > li:last-child) {
+    padding-bottom: 0;
+  }
+
+  /* number badge */
+  .steps :global(ol > li)::before {
+    counter-increment: step;
+    content: counter(step);
+    position: absolute;
+    left: 0;
+    top: -0.1rem;
+    display: grid;
+    place-items: center;
+    width: 2rem;
+    height: 2rem;
+    border-radius: var(--radius-full);
+    background: var(--surface-2);
+    border: 1px solid var(--border-strong);
+    color: var(--ink);
+    font-family: var(--font-mono);
+    font-size: 0.85rem;
+    font-weight: 600;
+    z-index: 1;
+  }
+
+  /* connector line */
+  .steps :global(ol > li)::after {
+    content: '';
+    position: absolute;
+    left: 1rem;
+    top: 2rem;
+    bottom: -0.1rem;
+    width: 1px;
+    background: linear-gradient(var(--border-strong), transparent);
+  }
+  .steps :global(ol > li:last-child)::after {
+    display: none;
+  }
+
+  .steps :global(ol > li > :first-child) {
+    margin-top: 0;
+  }
+  .steps :global(ol > li > :last-child) {
+    margin-bottom: 0;
+  }
+</style>
