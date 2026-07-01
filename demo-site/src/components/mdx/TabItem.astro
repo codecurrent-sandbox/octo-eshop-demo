@@ -1,0 +1,31 @@
+---
+interface Props {
+  label: string;
+}
+const { label } = Astro.props;
+---
+
+<div class="tab-panel" role="tabpanel" data-label={label}>
+  <p class="tab-panel__fallback">{label}</p>
+  <slot />
+</div>
+
+<style>
+  .tab-panel {
+    min-width: 0;
+  }
+  .tab-panel :global(> :nth-child(2)) {
+    margin-top: 0;
+  }
+  .tab-panel :global(> :last-child) {
+    margin-bottom: 0;
+  }
+  .tab-panel__fallback {
+    font-weight: 600;
+    color: var(--text-muted);
+    margin-bottom: 0.5rem;
+  }
+  :global(.tabs[data-tabs-ready]) .tab-panel__fallback {
+    display: none;
+  }
+</style>

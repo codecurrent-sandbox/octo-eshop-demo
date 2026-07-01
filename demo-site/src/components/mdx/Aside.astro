@@ -1,0 +1,88 @@
+---
+import Icon from '../Icon.astro';
+
+interface Props {
+  type?: 'note' | 'tip' | 'caution' | 'danger';
+  title?: string;
+}
+
+const { type = 'note', title } = Astro.props;
+
+const config = {
+  note: { icon: 'info', label: 'Note' },
+  tip: { icon: 'lightbulb', label: 'Tip' },
+  caution: { icon: 'alert-triangle', label: 'Caution' },
+  danger: { icon: 'shield', label: 'Danger' },
+} as const;
+
+const { icon, label } = config[type];
+---
+
+<aside class={`aside aside--${type}`} role="note">
+  <p class="aside__title">
+    <Icon name={icon} size={16} />
+    <span>{title ?? label}</span>
+  </p>
+  <div class="aside__body">
+    <slot />
+  </div>
+</aside>
+
+<style>
+  .aside {
+    --_c: var(--accent);
+    --_wash: var(--accent-wash);
+    margin-block: 1.5rem;
+    padding: 1rem 1.15rem;
+    border: 1px solid color-mix(in oklab, var(--_c) 38%, var(--border));
+    border-radius: var(--radius);
+    background: var(--_wash);
+  }
+  .aside--note {
+    --_c: var(--accent);
+    --_wash: var(--accent-wash);
+  }
+  .aside--tip {
+    --_c: var(--success);
+    --_wash: var(--success-wash);
+  }
+  .aside--caution {
+    --_c: var(--warn);
+    --_wash: var(--warn-wash);
+  }
+  .aside--danger {
+    --_c: var(--danger);
+    --_wash: var(--danger-wash);
+  }
+
+  .aside__title {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin: 0 0 0.35rem;
+    font-weight: 620;
+    font-size: 0.9rem;
+    color: color-mix(in oklab, var(--_c) 78%, var(--ink));
+    letter-spacing: -0.005em;
+  }
+  .aside__title :global(svg) {
+    color: var(--_c);
+    flex-shrink: 0;
+  }
+
+  .aside__body {
+    color: var(--text);
+    font-size: 0.95rem;
+  }
+  .aside__body :global(> :first-child) {
+    margin-top: 0;
+  }
+  .aside__body :global(> :last-child) {
+    margin-bottom: 0;
+  }
+  .aside__body :global(a) {
+    color: color-mix(in oklab, var(--_c) 70%, var(--link));
+    text-decoration: underline;
+    text-underline-offset: 2px;
+  }
+</style>

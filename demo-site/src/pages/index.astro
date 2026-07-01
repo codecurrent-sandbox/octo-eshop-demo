@@ -1,0 +1,49 @@
+---
+import BaseLayout from '../layouts/BaseLayout.astro';
+import Hero from '../components/home/Hero.astro';
+import DemoGrid from '../components/home/DemoGrid.astro';
+import GuidesSection from '../components/home/GuidesSection.astro';
+import StackSection from '../components/home/StackSection.astro';
+import CTASection from '../components/home/CTASection.astro';
+---
+
+<BaseLayout mainClass="home">
+  <Hero />
+  <DemoGrid />
+  <GuidesSection />
+  <StackSection />
+  <CTASection />
+</BaseLayout>
+
+<script>
+  // Progressive scroll-reveal. Content is visible by default; we only opt into
+  // the hidden/animate behavior once we've confirmed IntersectionObserver, and
+  // a safety net guarantees everything reveals even in edge cases.
+  const els = Array.from(document.querySelectorAll<HTMLElement>('[data-reveal]'));
+  const revealAll = () => els.forEach((el) => el.classList.add('is-visible'));
+
+  if (els.length) {
+    if (!('IntersectionObserver' in window)) {
+      revealAll();
+    } else {
+      document.documentElement.setAttribute('data-reveal-ready', '');
+      const io = new IntersectionObserver(
+        (entries, obs) => {
+          entries.forEach((e) => {
+            if (e.isIntersecting) {
+              e.target.classList.add('is-visible');
+              obs.unobserve(e.target);
+            }
+          });
+        },
+        { rootMargin: '0px 0px -8% 0px', threshold: 0.06 }
+      );
+      els.forEach((el) => io.observe(el));
+      // Safety: never leave content hidden if observation is interrupted.
+      // Arm even when this (deferred) module runs after `load` already fired.
+      const armFallback = () => window.setTimeout(revealAll, 1800);
+      if (document.readyState === 'complete') armFallback();
+      else window.addEventListener('load', armFallback, { once: true });
+    }
+  }
+</script>

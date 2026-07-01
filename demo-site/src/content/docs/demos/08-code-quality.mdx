@@ -2,9 +2,14 @@
 draft: false
 title: Code Quality
 description: CodeQL, secret scanning, dependency review, and Copilot Autofix from the GitHub UI.
+category: Demos
+order: 8
+capability: Code security
+duration: 4 min
+difficulty: Core
+icon: shield-check
+summary: CodeQL, secret scanning, dependency review, and Autofix in the workflow.
 ---
-
-import { Aside, Steps } from '@astrojs/starlight/components';
 
 ## What This Demonstrates
 
@@ -20,10 +25,12 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 ## a) Enable Code Scanning (CodeQL)
 
 <Steps>
-  1. Navigate to the repo on GitHub → **Settings** → **Code security and analysis**. 2. Enable
-  **Code scanning** with the default CodeQL setup. 3. Show the auto-generated `codeql.yml` workflow
-  detecting JavaScript/TypeScript. 4. Trigger a scan and walk through the results under **Security →
-  Code scanning alerts**.
+
+1. Navigate to the repo on GitHub → **Settings** → **Code security and analysis**.
+2. Enable **Code scanning** with the default CodeQL setup.
+3. Show the auto-generated `codeql.yml` workflow detecting JavaScript/TypeScript.
+4. Trigger a scan and walk through the results under **Security and quality → Code scanning alerts**.
+
 </Steps>
 
 <Aside type="tip" title="Why this works">
@@ -36,9 +43,12 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 ## b) Copilot Autofix on Code Scanning Alerts
 
 <Steps>
-  1. Open a code scanning alert from the **Security** tab. 2. Click **Generate fix** (Copilot
-  Autofix) on a finding. 3. Walk through the suggested patch — explain how it addresses the
-  vulnerability. 4. Commit the fix directly or open a PR from the suggestion.
+
+1. Open a code scanning alert from the **Security and quality** tab.
+2. Click **Generate fix** (Copilot Autofix) on a finding.
+3. Walk through the suggested patch — explain how it addresses the vulnerability.
+4. Commit the fix directly or open a PR from the suggestion.
+
 </Steps>
 
 <Aside type="tip" title="Why this works">
@@ -51,9 +61,11 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 ## c) Dependency Review in PRs
 
 <Steps>
-  1. Create a branch and add or bump a dependency in one of the services' `package.json`. 2. Open a
-  PR — show the **Dependency Review** summary that appears. 3. Point out how vulnerable or
-  license-incompatible dependencies are flagged before merge.
+
+1. Create a branch and add or bump a dependency in one of the services' `package.json`.
+2. Open a PR — show the **Dependency Review** summary that appears.
+3. Point out how vulnerable or license-incompatible dependencies are flagged before merge.
+
 </Steps>
 
 <Aside type="tip" title="Why this works">
@@ -66,9 +78,11 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 ## d) Secret Scanning + Push Protection
 
 <Steps>
-  1. Navigate to **Settings → Code security → Secret scanning** — show it's enabled. 2. Show **Push
-  protection** is on (blocks pushes containing detected secrets). 3. Optionally demo by attempting
-  to push a dummy secret pattern and showing the block.
+
+1. Navigate to **Settings → Code security → Secret scanning** — show it's enabled.
+2. Show **Push protection** is on (blocks pushes containing detected secrets).
+3. Optionally demo by attempting to push a dummy secret pattern and showing the block.
+
 </Steps>
 
 <Aside type="caution">
@@ -81,9 +95,11 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 ## e) Security Overview Dashboard
 
 <Steps>
-  1. Go to **Security → Overview** at the repo or org level. 2. Walk through the dashboard: open
-  alerts, fixed alerts, coverage. 3. Highlight how code quality findings, dependency alerts, and
-  secret alerts roll up into one view.
+
+1. Go to **Security and quality → Overview** at the repo or org level.
+2. Walk through the dashboard: open alerts, fixed alerts, coverage.
+3. Highlight how code quality findings, dependency alerts, and secret alerts roll up into one view.
+
 </Steps>
 
 ---
@@ -91,9 +107,12 @@ import { Aside, Steps } from '@astrojs/starlight/components';
 ## f) Code Scanning in a PR (Inline Experience)
 
 <Steps>
-  1. Open a PR that triggers a CodeQL finding (e.g., missing input validation). 2. Show the inline
-  annotation on the PR diff with the finding details. 3. Show Copilot Autofix suggesting a
-  remediation inline. 4. Accept or dismiss the suggestion.
+
+1. Open a PR that triggers a CodeQL finding (e.g., missing input validation).
+2. Show the inline annotation on the PR diff with the finding details.
+3. Show Copilot Autofix suggesting a remediation inline.
+4. Accept or dismiss the suggestion.
+
 </Steps>
 
 <Aside type="tip" title="Why this works">

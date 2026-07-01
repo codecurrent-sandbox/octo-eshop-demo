@@ -1,18 +1,23 @@
 ---
 draft: false
-title: Agents HQ
-description: Multi-agent orchestration, PR automation, and policy alignment in the GitHub web experience.
+title: Agents Page
+description: Start, monitor, and steer Copilot coding agents across repositories from the Agents page.
+category: Demos
+order: 2
+capability: Agents page
+duration: 5 min
+difficulty: Advanced
+icon: network
+summary: Start, monitor, and steer multiple coding agents from one place on GitHub.
 ---
-
-import { Aside } from '@astrojs/starlight/components';
 
 ## What This Demonstrates
 
-**GitHub Agents HQ** enables configuring specialized agents that run automatically on PRs and repository events — enforcing quality, security, and consistency at scale.
+The **Agents page** (`github.com/copilot/agents`) is GitHub's control plane for the Copilot coding agent — start agent tasks across repositories, watch their sessions live, steer them mid-run, and review the pull requests they open. This demo uses Copilot to plan how you'd put that orchestration to work on this repo.
 
 ## Prerequisites
 
-- GitHub web UI (Agents HQ context)
+- GitHub web UI (the Agents page at `github.com/copilot/agents`)
 - Repository with existing PR history for reference
 
 ## Prompts
@@ -20,8 +25,8 @@ import { Aside } from '@astrojs/starlight/components';
 ### Prompt A — PR Automation
 
 ```text
-For this repo, propose 3 specialized agents I should configure in Agents HQ:
-one for Terraform/Azure, one for backend API quality, one for frontend UX
+For this repo, propose 3 specialized agents I should configure to run on this
+repo: one for Terraform/Azure, one for backend API quality, one for frontend UX
 consistency. For each, define scope, trigger conditions, and expected outputs.
 ```
 
@@ -41,7 +46,7 @@ consistency. For each, define scope, trigger conditions, and expected outputs.
 ### Prompt B — Multi-Agent Orchestration
 
 ```text
-Simulate an Agents HQ workflow for a PR that touches `infrastructure/terraform`
+Simulate a multi-agent workflow for a PR that touches `infrastructure/terraform`
 and `services/order-service`. Show which agents should run, in what order, and
 what each should validate.
 ```
@@ -68,8 +73,8 @@ before merge.
 ```
 
 <Aside type="tip" title="Why this works">
-  Combines GitHub branch protection rules with Agents HQ policies for a comprehensive governance
-  model that prevents unsafe merges.
+  Combines GitHub branch protection rules with agent policies for a comprehensive governance model
+  that prevents unsafe merges.
 </Aside>
 
 **What to look for:**

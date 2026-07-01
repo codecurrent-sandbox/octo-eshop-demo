@@ -6,7 +6,7 @@
 # extended with the OpenVPN client so the post-start script can bring up a
 # Point-to-Site tunnel into the dev Azure VNet. See
 # docs/dev-codespaces-openvpn.md for the end-to-end flow.
-ARG VARIANT=20
+ARG VARIANT=22
 FROM mcr.microsoft.com/devcontainers/typescript-node:${VARIANT}
 
 # Install the OpenVPN client. iproute2 ships with the base image but is named

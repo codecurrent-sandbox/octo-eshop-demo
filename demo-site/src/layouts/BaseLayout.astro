@@ -1,0 +1,67 @@
+---
+import '@fontsource-variable/mona-sans/wdth.css';
+import '@fontsource-variable/hubot-sans/wdth.css';
+import '@fontsource-variable/jetbrains-mono/index.css';
+import '../styles/theme.css';
+
+import TopNav from '../components/TopNav.astro';
+import Footer from '../components/Footer.astro';
+import { SITE, href } from '../lib/site';
+
+interface Props {
+  title?: string;
+  description?: string;
+  mainClass?: string;
+}
+
+const { title, description = SITE.description, mainClass } = Astro.props;
+const pageTitle = title ? `${title} · ${SITE.shortTitle} Copilot Demos` : SITE.title;
+const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url).href;
+---
+
+<!doctype html>
+<html lang="en" data-theme="dark">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <link rel="icon" href={href('favicon.svg')} type="image/svg+xml" />
+    <title>{pageTitle}</title>
+    <meta name="description" content={description} />
+    <link rel="canonical" href={canonical} />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:title" content={pageTitle} />
+    <meta property="og:description" content={description} />
+    <meta property="og:url" content={canonical} />
+    <meta name="twitter:card" content="summary" />
+    <meta name="twitter:title" content={pageTitle} />
+    <meta name="twitter:description" content={description} />
+
+    <meta name="theme-color" content="#0d1117" id="theme-color-meta" />
+
+    <script is:inline>
+      (function () {
+        var theme = 'dark';
+        try {
+          var stored = localStorage.getItem('octo-theme');
+          var prefersLight = window.matchMedia('(prefers-color-scheme: light)').matches;
+          theme = stored || (prefersLight ? 'light' : 'dark');
+        } catch (e) {
+          /* storage/matchMedia unavailable — fall back to dark */
+        }
+        document.documentElement.dataset.theme = theme;
+        document.documentElement.classList.add('js');
+        var meta = document.getElementById('theme-color-meta');
+        if (meta) meta.setAttribute('content', theme === 'light' ? '#ffffff' : '#0d1117');
+      })();
+    </script>
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+    <TopNav />
+    <main id="main" class={mainClass}>
+      <slot />
+    </main>
+    <Footer />
+  </body>
+</html>

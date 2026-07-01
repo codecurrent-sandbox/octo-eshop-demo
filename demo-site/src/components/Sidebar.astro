@@ -1,0 +1,87 @@
+---
+import { getCollection } from 'astro:content';
+import Icon from './Icon.astro';
+import { buildNav, href } from '../lib/site';
+
+interface Props {
+  currentId: string;
+}
+const { currentId } = Astro.props;
+
+const docs = await getCollection('docs');
+const nav = buildNav(docs);
+---
+
+<nav class="doc-nav" aria-label="Documentation">
+  {
+    nav.map((group) => (
+      <div class="doc-nav__group">
+        <p class="doc-nav__title">
+          <Icon name={group.icon} size={14} />
+          <span>{group.category}</span>
+        </p>
+        <ul>
+          {group.items.map((item) => (
+            <li>
+              <a
+                href={href(item.id)}
+                aria-current={item.id === currentId ? 'page' : undefined}
+              >
+                {item.data.title}
+              </a>
+            </li>
+          ))}
+        </ul>
+      </div>
+    ))
+  }
+</nav>
+
+<style>
+  .doc-nav {
+    display: flex;
+    flex-direction: column;
+    gap: 1.5rem;
+    font-size: 0.9rem;
+  }
+  .doc-nav__title {
+    display: flex;
+    align-items: center;
+    gap: 0.45rem;
+    margin-bottom: 0.55rem;
+    font-size: 0.72rem;
+    font-weight: 620;
+    text-transform: uppercase;
+    letter-spacing: 0.07em;
+    color: var(--text-subtle);
+  }
+  .doc-nav__title :global(svg) {
+    color: var(--text-subtle);
+  }
+  .doc-nav ul {
+    list-style: none;
+    margin: 0;
+    padding: 0;
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+  }
+  .doc-nav li a {
+    display: block;
+    padding: 0.4rem 0.7rem;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-weight: 480;
+    transition: color var(--dur-1) var(--ease-out-quart),
+      background var(--dur-1) var(--ease-out-quart);
+  }
+  .doc-nav li a:hover {
+    color: var(--ink);
+    background: var(--surface-hover);
+  }
+  .doc-nav li a[aria-current='page'] {
+    color: var(--accent-fg);
+    background: var(--accent-wash);
+    font-weight: 560;
+  }
+</style>

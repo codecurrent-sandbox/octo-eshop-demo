@@ -1,0 +1,256 @@
+---
+import Icon from './Icon.astro';
+import ThemeToggle from './ThemeToggle.astro';
+import { SITE, TOP_NAV, href } from '../lib/site';
+
+const current = Astro.url.pathname;
+const seg = (slug: string) => slug.split('/')[0];
+const isActive = (slug: string) => current.startsWith(href(seg(slug)));
+---
+
+<header class="site-nav">
+  <div class="container site-nav__inner">
+    <a class="brand" href={href('/')} aria-label={`${SITE.shortTitle} — home`}>
+      <span class="brand__mark"><Icon name="sparkles" size={19} /></span>
+      <span class="brand__text">
+        <span class="brand__name">{SITE.shortTitle}</span>
+        <span class="brand__sub">Copilot&nbsp;Demos</span>
+      </span>
+    </a>
+
+    <nav class="site-nav__links" aria-label="Primary">
+      {
+        TOP_NAV.map((item) => (
+          <a
+            href={href(item.slug)}
+            class="site-nav__link"
+            aria-current={isActive(item.slug) ? 'page' : undefined}
+          >
+            {item.label}
+          </a>
+        ))
+      }
+    </nav>
+
+    <div class="site-nav__actions">
+      <ThemeToggle />
+      <a
+        class="icon-btn"
+        href={SITE.repo}
+        target="_blank"
+        rel="noreferrer noopener"
+        aria-label="View source on GitHub"
+      >
+        <Icon name="github" size={19} />
+      </a>
+      <a class="btn btn-primary site-nav__cta" href={SITE.codespaces} target="_blank" rel="noreferrer noopener">
+        <Icon name="rocket" size={16} />
+        <span>Codespaces</span>
+      </a>
+      <button
+        class="icon-btn site-nav__burger"
+        type="button"
+        aria-label="Open menu"
+        aria-expanded="false"
+        aria-controls="mobile-menu"
+        data-nav-toggle
+      >
+        <span class="site-nav__burger-open"><Icon name="menu" size={20} /></span>
+        <span class="site-nav__burger-close"><Icon name="x" size={20} /></span>
+      </button>
+    </div>
+  </div>
+
+  <div class="mobile-menu" id="mobile-menu" hidden>
+    <nav class="mobile-menu__nav" aria-label="Mobile">
+      {
+        TOP_NAV.map((item) => (
+          <a href={href(item.slug)} aria-current={isActive(item.slug) ? 'page' : undefined}>
+            <span>{item.label}</span>
+            <Icon name="chevron-right" size={16} />
+          </a>
+        ))
+      }
+      <a class="mobile-menu__ext" href={SITE.codespaces} target="_blank" rel="noreferrer noopener">
+        <span>Open in Codespaces</span>
+        <Icon name="rocket" size={16} />
+      </a>
+      <a class="mobile-menu__ext" href={SITE.repo} target="_blank" rel="noreferrer noopener">
+        <span>GitHub repository</span>
+        <Icon name="github" size={16} />
+      </a>
+    </nav>
+  </div>
+</header>
+
+<style>
+  .site-nav {
+    position: sticky;
+    top: 0;
+    z-index: var(--z-nav);
+    background: color-mix(in oklab, var(--bg) 82%, transparent);
+    backdrop-filter: saturate(1.4) blur(14px);
+    -webkit-backdrop-filter: saturate(1.4) blur(14px);
+    border-bottom: 1px solid var(--border-muted);
+  }
+
+  .site-nav__inner {
+    height: var(--nav-h);
+    display: flex;
+    align-items: center;
+    gap: 1.5rem;
+  }
+
+  .brand {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.6rem;
+    color: var(--ink);
+    flex-shrink: 0;
+  }
+  .brand__mark {
+    display: grid;
+    place-items: center;
+    width: 2.1rem;
+    height: 2.1rem;
+    border-radius: var(--radius-sm);
+    color: #fff;
+    background: var(--grad-copilot);
+    box-shadow: inset 0 0 0 1px color-mix(in oklab, #fff 22%, transparent),
+      0 4px 12px color-mix(in oklab, #8957e5 35%, transparent);
+  }
+  .brand__text {
+    display: flex;
+    flex-direction: column;
+    gap: 0.16rem;
+    line-height: 1;
+  }
+  .brand__name {
+    font-family: var(--font-display);
+    font-weight: 680;
+    font-size: 1.02rem;
+    letter-spacing: -0.01em;
+  }
+  .brand__sub {
+    font-size: 0.68rem;
+    font-weight: 550;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    color: var(--text-subtle);
+  }
+
+  .site-nav__links {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    margin-right: auto;
+  }
+  .site-nav__link {
+    padding: 0.45rem 0.7rem;
+    border-radius: var(--radius-sm);
+    color: var(--text-muted);
+    font-weight: 520;
+    font-size: 0.92rem;
+    transition: color var(--dur-1) var(--ease-out-quart), background var(--dur-1) var(--ease-out-quart);
+  }
+  .site-nav__link:hover {
+    color: var(--ink);
+    background: var(--surface-hover);
+  }
+  .site-nav__link[aria-current='page'] {
+    color: var(--ink);
+    background: var(--accent-wash);
+  }
+
+  .site-nav__actions {
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+
+  .site-nav__burger {
+    display: none;
+  }
+  .site-nav__burger-close {
+    display: none;
+  }
+  .site-nav[data-open] .site-nav__burger-open {
+    display: none;
+  }
+  .site-nav[data-open] .site-nav__burger-close {
+    display: inline-flex;
+  }
+
+  .mobile-menu {
+    display: none;
+    border-bottom: 1px solid var(--border);
+    background: var(--bg);
+  }
+  .mobile-menu__nav {
+    display: flex;
+    flex-direction: column;
+    padding: 0.5rem var(--gutter) 1rem;
+  }
+  .mobile-menu__nav a {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.85rem 0.4rem;
+    color: var(--text);
+    border-bottom: 1px solid var(--border-muted);
+    font-weight: 520;
+  }
+  .mobile-menu__nav a[aria-current='page'] {
+    color: var(--accent-fg);
+  }
+  .mobile-menu__ext {
+    color: var(--text-muted) !important;
+  }
+
+  @media (max-width: 60rem) {
+    .site-nav__links {
+      display: none;
+    }
+    .site-nav__cta span {
+      display: none;
+    }
+    .site-nav__cta {
+      padding: 0.6rem;
+    }
+    .site-nav__burger {
+      display: inline-flex;
+    }
+    .site-nav[data-open] .mobile-menu {
+      display: block;
+    }
+  }
+
+  @media (max-width: 30rem) {
+    .site-nav__cta {
+      display: none;
+    }
+    .brand__sub {
+      display: none;
+    }
+  }
+</style>
+
+<script>
+  const nav = document.querySelector('.site-nav');
+  const toggle = nav?.querySelector('[data-nav-toggle]');
+  const menu = nav?.querySelector('#mobile-menu') as HTMLElement | null;
+  toggle?.addEventListener('click', () => {
+    const open = nav?.toggleAttribute('data-open');
+    toggle.setAttribute('aria-expanded', String(Boolean(open)));
+    toggle.setAttribute('aria-label', open ? 'Close menu' : 'Open menu');
+    if (menu) menu.hidden = !open;
+  });
+  // Close the drawer after following a link.
+  menu?.querySelectorAll('a').forEach((a) =>
+    a.addEventListener('click', () => {
+      nav?.removeAttribute('data-open');
+      toggle?.setAttribute('aria-expanded', 'false');
+      if (menu) menu.hidden = true;
+    })
+  );
+</script>

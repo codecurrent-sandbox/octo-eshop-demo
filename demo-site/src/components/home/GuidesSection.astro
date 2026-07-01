@@ -1,0 +1,138 @@
+---
+import Icon from '../Icon.astro';
+import { href } from '../../lib/site';
+
+const sequence = [
+  { step: 'Plan a new service', time: '3 min' },
+  { step: 'Scaffold the implementation', time: '3 min' },
+  { step: 'Review the changes', time: '2 min' },
+  { step: 'Generate BDD tests', time: '2 min' },
+  { step: 'Create a CI workflow', time: '2 min' },
+  { step: 'Visualize the architecture', time: '2 min' },
+  { step: 'Terminal assistance', time: '2 min' },
+  { step: 'Code quality & security', time: '4 min' },
+];
+---
+
+<section class="guides">
+  <div class="container guides__inner">
+    <div class="guides__pitch" data-reveal>
+      <h2>Run the whole thing in 20 minutes</h2>
+      <p>
+        A curated sequence that hits every major capability in one natural flow. Each stop includes
+        the prompt, what to narrate, and timing — so you can present with confidence.
+      </p>
+      <div class="guides__actions">
+        <a class="btn btn-primary" href={href('guides/end-to-end-demo')}>
+          <Icon name="book-open" size={16} />
+          <span>Open the end-to-end guide</span>
+        </a>
+        <a class="btn btn-ghost" href={href('guides/presenter-tips')}>
+          <Icon name="lightbulb" size={16} />
+          <span>Presenter tips</span>
+        </a>
+      </div>
+    </div>
+
+    <ol class="guides__timeline" data-reveal>
+      {
+        sequence.map((item, i) => (
+          <li class="guides__stop">
+            <span class="guides__dot">{i + 1}</span>
+            <span class="guides__step">{item.step}</span>
+            <span class="guides__time">
+              <Icon name="clock" size={12} />
+              {item.time}
+            </span>
+          </li>
+        ))
+      }
+    </ol>
+  </div>
+</section>
+
+<style>
+  .guides {
+    padding-block: clamp(3.5rem, 6vw, 6rem);
+  }
+  .guides__inner {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: clamp(2rem, 5vw, 4rem);
+    align-items: center;
+  }
+  .guides__pitch h2 {
+    font-family: var(--font-display);
+    font-size: clamp(1.9rem, 1.4rem + 2.2vw, 2.75rem);
+    letter-spacing: -0.025em;
+    line-height: 1.08;
+  }
+  .guides__pitch p {
+    margin-top: 0.9rem;
+    font-size: 1.1rem;
+    color: var(--text-muted);
+    max-width: 46ch;
+    text-wrap: pretty;
+  }
+  .guides__actions {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.7rem;
+    margin-top: 1.6rem;
+  }
+
+  .guides__timeline {
+    list-style: none;
+    margin: 0;
+    padding: 0.5rem 0;
+    counter-reset: none;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-lg);
+    background: var(--surface);
+    overflow: hidden;
+  }
+  .guides__stop {
+    display: grid;
+    grid-template-columns: auto 1fr auto;
+    align-items: center;
+    gap: 0.9rem;
+    padding: 0.7rem 1.15rem;
+    position: relative;
+  }
+  .guides__stop + .guides__stop {
+    border-top: 1px solid var(--border-muted);
+  }
+  .guides__dot {
+    display: grid;
+    place-items: center;
+    width: 1.7rem;
+    height: 1.7rem;
+    border-radius: var(--radius-full);
+    background: var(--accent-wash);
+    color: var(--accent-fg);
+    border: 1px solid color-mix(in oklab, var(--accent) 30%, transparent);
+    font-family: var(--font-mono);
+    font-size: 0.78rem;
+    font-weight: 600;
+  }
+  .guides__step {
+    color: var(--ink);
+    font-weight: 500;
+    font-size: 0.98rem;
+  }
+  .guides__time {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.3rem;
+    color: var(--text-subtle);
+    font-size: 0.8rem;
+    font-family: var(--font-mono);
+    white-space: nowrap;
+  }
+
+  @media (max-width: 52rem) {
+    .guides__inner {
+      grid-template-columns: 1fr;
+    }
+  }
+</style>

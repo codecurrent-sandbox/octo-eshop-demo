@@ -1,0 +1,219 @@
+---
+import { getCollection, type CollectionEntry } from 'astro:content';
+import type { MarkdownHeading } from 'astro';
+import BaseLayout from './BaseLayout.astro';
+import Sidebar from '../components/Sidebar.astro';
+import TableOfContents from '../components/TableOfContents.astro';
+import Pagination from '../components/Pagination.astro';
+import Icon from '../components/Icon.astro';
+import { readingOrder, CATEGORY_ICON, type Category } from '../lib/site';
+import '../styles/prose.css';
+
+interface Props {
+  entry: CollectionEntry<'docs'>;
+  headings: MarkdownHeading[];
+}
+const { entry, headings } = Astro.props;
+const { title, description, category, capability, duration, difficulty } = entry.data;
+
+const docs = await getCollection('docs');
+const order = readingOrder(docs);
+const idx = order.findIndex((d) => d.id === entry.id);
+const prev = idx > 0 ? order[idx - 1] : undefined;
+const next = idx >= 0 && idx < order.length - 1 ? order[idx + 1] : undefined;
+const categoryIcon = category ? CATEGORY_ICON[category as Category] : 'book-open';
+---
+
+<BaseLayout title={title} description={description} mainClass="doc-main">
+  <div class="doc-layout container">
+    <aside class="doc-layout__side">
+      <div class="doc-layout__side-inner">
+        <Sidebar currentId={entry.id} />
+      </div>
+    </aside>
+
+    <article class="doc-layout__content">
+      <details class="doc-drawer">
+        <summary>
+          <span><Icon name="list" size={16} /> Browse the guide</span>
+          <Icon name="chevron-down" size={16} class="doc-drawer__chevron" />
+        </summary>
+        <div class="doc-drawer__body">
+          <Sidebar currentId={entry.id} />
+        </div>
+      </details>
+
+      <header class="doc-header">
+        {
+          category && (
+            <p class="doc-header__crumb">
+              <Icon name={categoryIcon} size={14} />
+              <span>{category}</span>
+            </p>
+          )
+        }
+        <h1>{title}</h1>
+        {description && <p class="doc-header__lede">{description}</p>}
+        {
+          (duration || difficulty || capability) && (
+            <div class="doc-header__meta">
+              {difficulty && (
+                <span class="pill" data-level={difficulty}>
+                  <Icon name="gauge" size={13} />
+                  {difficulty}
+                </span>
+              )}
+              {duration && (
+                <span class="pill">
+                  <Icon name="clock" size={13} />
+                  {duration}
+                </span>
+              )}
+              {capability && (
+                <span class="pill">
+                  <Icon name="sparkles" size={13} />
+                  {capability}
+                </span>
+              )}
+            </div>
+          )
+        }
+      </header>
+
+      <div class="prose">
+        <slot />
+      </div>
+
+      <Pagination prev={prev} next={next} />
+    </article>
+
+    <aside class="doc-layout__toc">
+      <div class="doc-layout__toc-inner">
+        <TableOfContents headings={headings} />
+      </div>
+    </aside>
+  </div>
+</BaseLayout>
+
+<style>
+  .doc-layout {
+    display: grid;
+    grid-template-columns: 15.5rem minmax(0, 1fr) 14rem;
+    gap: clamp(1.5rem, 3vw, 3rem);
+    align-items: start;
+    padding-block: 2.5rem 1rem;
+  }
+
+  .doc-layout__side,
+  .doc-layout__toc {
+    position: sticky;
+    top: calc(var(--nav-h) + 1.25rem);
+    align-self: start;
+  }
+  .doc-layout__side-inner,
+  .doc-layout__toc-inner {
+    max-height: calc(100dvh - var(--nav-h) - 3rem);
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding-bottom: 1rem;
+    scrollbar-width: thin;
+  }
+
+  .doc-layout__content {
+    min-width: 0;
+    max-width: 52rem;
+  }
+
+  /* header */
+  .doc-header {
+    margin-bottom: 2.25rem;
+  }
+  .doc-header__crumb {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.4rem;
+    font-size: 0.78rem;
+    font-weight: 560;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    color: var(--accent-fg);
+    margin-bottom: 0.85rem;
+  }
+  .doc-header h1 {
+    font-family: var(--font-display);
+    font-size: clamp(2rem, 1.5rem + 2.4vw, 2.9rem);
+    line-height: 1.08;
+    letter-spacing: -0.025em;
+  }
+  .doc-header__lede {
+    margin-top: 0.9rem;
+    font-size: 1.15rem;
+    line-height: 1.55;
+    color: var(--text-muted);
+    max-width: 60ch;
+    text-wrap: pretty;
+  }
+  .doc-header__meta {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.5rem;
+    margin-top: 1.35rem;
+  }
+
+  /* mobile drawer */
+  .doc-drawer {
+    display: none;
+    margin-bottom: 1.75rem;
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    background: var(--surface);
+  }
+  .doc-drawer summary {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 0.8rem 1rem;
+    font-weight: 560;
+    cursor: pointer;
+    list-style: none;
+    color: var(--ink);
+  }
+  .doc-drawer summary::-webkit-details-marker {
+    display: none;
+  }
+  .doc-drawer summary > span {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+  }
+  .doc-drawer[open] .doc-drawer__chevron {
+    transform: rotate(180deg);
+  }
+  .doc-drawer__chevron {
+    transition: transform var(--dur-2) var(--ease-out-quart);
+  }
+  .doc-drawer__body {
+    padding: 0.25rem 1rem 1.1rem;
+    border-top: 1px solid var(--border-muted);
+  }
+
+  @media (max-width: 76rem) {
+    .doc-layout {
+      grid-template-columns: 15rem minmax(0, 1fr);
+    }
+    .doc-layout__toc {
+      display: none;
+    }
+  }
+  @media (max-width: 56rem) {
+    .doc-layout {
+      grid-template-columns: minmax(0, 1fr);
+    }
+    .doc-layout__side {
+      display: none;
+    }
+    .doc-drawer {
+      display: block;
+    }
+  }
+</style>

@@ -2,19 +2,17 @@
 draft: false
 title: CI/CD Pipeline
 description: Continuous integration, delivery, and infrastructure workflows for the Octo E-Shop.
+category: Reference
+order: 2
+icon: git-branch
+summary: Continuous integration, delivery, and infrastructure workflows.
 ---
-
-import { Aside } from '@astrojs/starlight/components';
 
 ## Overview
 
 The Octo E-Shop uses **GitHub Actions** for CI/CD with a progressive deployment model across three environments. The platform consists of 6 microservices deployed to **Azure Kubernetes Service (AKS)** via **Helm charts**, with infrastructure provisioned by **Terraform**.
 
-```
-Code Push → CI Validation → Build & Push Images → Deploy Dev → Deploy Staging → Deploy Production
-                                                      ↑              ↑               ↑
-                                                   automatic    approval gate    approval gate
-```
+<PipelineFlow />
 
 ## Workflow Inventory
 
@@ -32,23 +30,25 @@ Code Push → CI Validation → Build & Push Images → Deploy Dev → Deploy St
 
 ### 1. CI Pipeline (`ci.yml`)
 
-Runs on every PR and push to protected branches:
+Runs on every PR and on pushes to `main`, `develop`, and `feature/**`:
 
 1. **Lint & Format** — ESLint + Prettier check
-2. **Unit Tests** — Per-service test execution with coverage
-3. **Build Validation** — TypeScript compilation + Docker build (no push)
-4. **Security Scan** — Trivy vulnerability scanning on built images
+2. **Build & Test** — Per-service TypeScript build and tests with coverage, using Postgres and Redis service containers (a test summary is posted on PRs)
+3. **Docker Build** — Build all six service images on PRs (no push)
+4. **Security Scan** — `npm audit` for high-severity dependency vulnerabilities
+5. **IaC Validation** — Terraform `validate`/`fmt` plus Helm lint and template render
 
 ### 2. Build & Deploy Pipeline (`build-push.yml`)
 
-Triggered on pushes to `main` or `develop`:
+Triggered on pushes to `main` or `develop` that touch `services/**` or `shared/**`:
 
-1. **Resolve Tag** — Generate image tag from git short SHA
-2. **Build Matrix** — Build all 6 service Docker images in parallel
-3. **Push to ACR** — Tag and push images to Azure Container Registry
-4. **Deploy Dev** — Automatic Helm deploy to dev namespace
-5. **Deploy Staging** — Requires manual approval
-6. **Deploy Production** — Requires manual approval
+1. **Resolve Tag** — Generate image tag from git short SHA (branch names sanitized)
+2. **Detect Changes** — Path filter so only changed services build (all six on manual `build_all`)
+3. **Build & Push** — Build changed service images in parallel and push to Azure Container Registry
+4. **Scan Images** — Trivy vulnerability scan; SARIF results uploaded to GitHub code scanning
+5. **Deploy Dev** — Automatic Helm deploy to `octo-eshop-dev` (from `main`)
+6. **Deploy Staging** — Helm deploy after a manual approval gate
+7. **Deploy Production** — Helm deploy after a manual approval gate
 
 ### 3. Infrastructure Pipeline
 
@@ -69,11 +69,13 @@ Emergency rollback via Helm:
 
 ## Environment Strategy
 
-| Environment    | Branch        | Deployment     | Approval |
-| -------------- | ------------- | -------------- | -------- |
-| **Dev**        | main, develop | Automatic      | None     |
-| **Staging**    | main          | Manual trigger | Required |
-| **Production** | main          | Manual trigger | Required |
+| Environment    | Branch | Deployment                       | Approval |
+| -------------- | ------ | -------------------------------- | -------- |
+| **Dev**        | main   | Automatic on merge               | None     |
+| **Staging**    | main   | After Dev, via approval gate     | Required |
+| **Production** | main   | After Staging, via approval gate | Required |
+
+Pushes to `develop` build and push images but do **not** deploy — only `main` triggers the dev → staging → production chain, gated by the `staging` and `production` GitHub Environments.
 
 ## Secrets Management
 
@@ -93,6 +95,7 @@ Secrets flow through three layers:
 ### Image Tagging
 
 - Images tagged with git short SHA (e.g., `d802d86`)
+- On `main`, images also receive the `latest` tag
 - Branch names sanitized (`feature/xyz` → `feature-xyz`) for Docker tag compatibility
 - Tag resolved in a dedicated job before the build matrix
 

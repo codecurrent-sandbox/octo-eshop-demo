@@ -1,0 +1,53 @@
+---
+import { getCollection } from 'astro:content';
+import DemoCard from './DemoCard.astro';
+import { byOrder } from '../../lib/site';
+
+const docs = await getCollection('docs');
+const demos = docs
+  .filter((d) => d.data.category === 'Demos' && !d.data.draft)
+  .sort(byOrder);
+---
+
+<section id="demos" class="demos">
+  <div class="container">
+    <div class="demos__head" data-reveal>
+      <h2>Eight demos, one real platform</h2>
+      <p>
+        Each demo is a self-contained scenario — copy-paste prompts, what to narrate, and what to
+        watch for. Run one, or string them together into a full showcase.
+      </p>
+    </div>
+    <div class="demo-grid">
+      {demos.map((d, i) => <DemoCard entry={d} index={i + 1} />)}
+    </div>
+  </div>
+</section>
+
+<style>
+  .demos {
+    padding-block: clamp(3.5rem, 6vw, 6rem);
+  }
+  .demos__head {
+    max-width: 44rem;
+    margin-bottom: 2.5rem;
+  }
+  .demos__head h2 {
+    font-family: var(--font-display);
+    font-size: clamp(1.9rem, 1.4rem + 2.2vw, 2.75rem);
+    letter-spacing: -0.025em;
+    line-height: 1.08;
+  }
+  .demos__head p {
+    margin-top: 0.9rem;
+    font-size: 1.1rem;
+    color: var(--text-muted);
+    max-width: 60ch;
+    text-wrap: pretty;
+  }
+  .demo-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(min(100%, 17.5rem), 1fr));
+    gap: 1.1rem;
+  }
+</style>
