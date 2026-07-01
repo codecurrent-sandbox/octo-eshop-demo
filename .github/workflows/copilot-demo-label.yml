@@ -1,0 +1,60 @@
+name: Label automated demo PRs
+
+# Deterministically stamps the `automated-demo` label on pull requests whose linked/closing
+# issue was filed by the Copilot Demo Scout (label `demo-candidate`). The review-loop
+# workflow gates on that label, so this is what scopes the loop to demo PRs only.
+
+on:
+  pull_request:
+    types: [opened, reopened]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: write
+
+concurrency:
+  group: demo-label-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  label:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Add automated-demo label when a linked issue is a demo-candidate
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.event.repository.name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          set -euo pipefail
+
+          # Collect labels of every issue this PR closes/links.
+          linked=$(gh api graphql \
+            -f query='
+              query($owner:String!, $repo:String!, $pr:Int!) {
+                repository(owner:$owner, name:$repo) {
+                  pullRequest(number:$pr) {
+                    closingIssuesReferences(first:20) {
+                      nodes { labels(first:20) { nodes { name } } }
+                    }
+                  }
+                }
+              }' \
+            -F owner="$OWNER" -F repo="$REPO" -F pr="$PR_NUMBER" \
+            --jq '[.data.repository.pullRequest.closingIssuesReferences.nodes[].labels.nodes[].name] | unique')
+
+          echo "Linked issue labels: ${linked:-[]}"
+
+          if printf '%s' "$linked" | grep -q '"demo-candidate"'; then
+            # Ensure the label exists, then apply it.
+            gh label create automated-demo \
+              --color 5319e7 \
+              --description "Auto-generated Copilot feature demo" \
+              --force >/dev/null 2>&1 || true
+            gh pr edit "$PR_NUMBER" --add-label automated-demo
+            echo "Labeled PR #$PR_NUMBER as automated-demo."
+          else
+            echo "No demo-candidate linked issue; leaving PR untouched."
+          fi
