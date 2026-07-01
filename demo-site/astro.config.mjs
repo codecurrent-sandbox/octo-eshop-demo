@@ -5,7 +5,7 @@ import expressiveCode from 'astro-expressive-code';
 // Fully custom site — no Starlight. Astro + MDX for content, Expressive Code
 // for GitHub-themed syntax highlighting with a built-in copy button.
 export default defineConfig({
-  site: 'https://edinc.github.io',
+  site: 'https://codecurrent-sandbox.github.io',
   base: '/octo-eshop-demo',
   trailingSlash: 'ignore',
   integrations: [
