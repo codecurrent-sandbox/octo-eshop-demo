@@ -13,7 +13,7 @@ summary: Have Copilot analyze diagrams, screenshots, designs, and documentation
 
 ## What This Demonstrates
 
-**Copilot vision** lets you attach images (JPEG, PNG, GIF, WebP) and PDF documents directly to chat
+**Copilot Vision** lets you attach images (JPEG, PNG, GIF, WebP) and PDF documents directly to chat
 prompts so Copilot can reason about visual content alongside your code. This is now generally
 available across all Copilot plans — in VS Code, github.com, and the Copilot CLI.
 
@@ -34,12 +34,13 @@ and your code.
 ### Prompt A — Architecture Diagram → Health Check Endpoints
 
 Attach a PNG showing the octo-eshop microservices (frontend, user-service, product-service,
-cart-service, order-service, payment-service) with their databases and ask:
+cart-service, order-service, payment-service) and ask:
 
 ```text
 I'm attaching our microservices architecture diagram. Looking at the services/ directory structure,
-identify which services are missing health check endpoints and generate a standardized /health
-endpoint for each one that returns service name, status, and database connectivity.
+identify which backend services are missing health check endpoints and generate a standardized
+/health endpoint for each one that returns service name and status (plus database connectivity
+check for services that use a database).
 ```
 
 <Aside type="tip" title="Why this works">
@@ -50,9 +51,9 @@ endpoint for each one that returns service name, status, and database connectivi
 
 **What to look for:**
 
-- Copilot identifies which services in `services/` are missing a `/health` route
-- Generated handlers return `{ service, status, db }` in the project's `{ success, data }` response shape
-- Database check uses the existing Prisma client from each service's repository layer
+- Copilot identifies which backend services in `services/` are missing a `/health` route
+- Generated handlers return `{ service, status }` (and `db` if applicable) in the project's `{ success, data }` response shape
+- For services with databases, the check uses the appropriate data client (Prisma for PostgreSQL services, Redis client for cart-service)
 
 ---
 
