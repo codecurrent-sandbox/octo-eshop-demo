@@ -5,3 +5,8 @@ package-lock.json
 helm
 plan
 infrastructure/terraform
+
+# GitHub Agentic Workflows (gh-aw): generated lock files + tool-managed sources
+.github/workflows/*.lock.yml
+.github/workflows/*.md
+.github/aw
