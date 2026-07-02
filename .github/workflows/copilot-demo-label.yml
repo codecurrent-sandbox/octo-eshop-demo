@@ -35,7 +35,11 @@ jobs:
     steps:
       - name: Label demo PRs and mark them ready once the agent has finished
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # `gh pr ready` (markPullRequestReadyForReview) is NOT permitted to the Actions
+          # GITHUB_TOKEN — it returns "Resource not accessible by integration". Use the user
+          # PAT (the same secret the scout uses to delegate to the agent), which can un-draft;
+          # fall back to GITHUB_TOKEN so labeling still works if the PAT is absent.
+          GH_TOKEN: ${{ secrets.GH_AW_AGENT_TOKEN || secrets.GITHUB_TOKEN }}
           OWNER: ${{ github.repository_owner }}
           REPO: ${{ github.event.repository.name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
