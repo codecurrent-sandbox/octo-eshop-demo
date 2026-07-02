@@ -1,14 +1,20 @@
-name: Label automated demo PRs
+name: Demo PR autopilot (label + auto-ready)
 
-# Stamps the `automated-demo` label on pull requests whose linked/closing issue was filed by
-# the Copilot Demo Scout (label `demo-candidate`), giving demo PRs an early, human-visible tag.
-# NOTE: this label does NOT gate the review-loop. That workflow scopes itself at runtime from
-# the linked `demo-candidate` issue (this label is only a secondary signal), so this labeler is
-# non-load-bearing — if it never runs, the review-loop still works correctly.
+# For automated demo PRs opened by the Copilot coding agent this workflow:
+#   1. stamps the `automated-demo` label (when a linked/closing issue is a `demo-candidate`), and
+#   2. once the agent has FINISHED building (its most recent `copilot_work_*` timeline event is
+#      `copilot_work_finished`), marks the draft PR ready for review — so Copilot code review
+#      kicks off automatically, with no manual "Ready for review" click.
+#
+# This runs as an ordinary `pull_request` workflow. With the repo's Copilot policy
+# "Require approval for workflow runs" disabled, the coding agent's own pushes trigger it
+# automatically (agent pushes are treated as "Copilot pushes", not "automation" pushes).
 
 on:
   pull_request:
-    types: [opened, reopened, edited, synchronize]
+    # `review_requested` fires the moment the agent finishes and auto-requests Copilot review —
+    # our most reliable post-completion trigger. The others catch earlier/other transitions.
+    types: [opened, reopened, edited, synchronize, review_requested]
 
 permissions:
   contents: read
@@ -16,17 +22,18 @@ permissions:
   pull-requests: write
 
 concurrency:
-  group: demo-label-${{ github.event.pull_request.number }}
-  cancel-in-progress: true
+  # One run at a time per PR, but DO NOT cancel in-progress runs: the un-draft step may be
+  # polling for the agent's `copilot_work_finished` event and must be allowed to complete.
+  group: demo-autopilot-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
 
 jobs:
-  label:
+  autopilot:
     runs-on: ubuntu-latest
-    # Skip fork PRs: they get a read-only token, so labeling would 403. Demo PRs are
-    # authored by the coding agent inside this repo, so this never skips a real demo PR.
+    # Skip fork PRs: they get a read-only token, so writes would 403.
     if: github.event.pull_request.head.repo.full_name == github.repository
     steps:
-      - name: Add automated-demo label when a linked issue is a demo-candidate
+      - name: Label demo PRs and mark them ready once the agent has finished
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           OWNER: ${{ github.repository_owner }}
@@ -34,8 +41,20 @@ jobs:
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
           set -euo pipefail
+          R="$OWNER/$REPO"
 
-          # Collect labels of every issue this PR closes/links.
+          # --- Scope: only the Copilot coding agent's PRs -------------------------------------
+          # The webhook actor login for the agent isn't stable across surfaces, so resolve the
+          # author via the API and match loosely rather than gating in `if:` (which would fail
+          # silently on a mismatch).
+          author=$(gh pr view "$PR_NUMBER" -R "$R" --json author --jq '.author.login' 2>/dev/null || echo "")
+          echo "PR #$PR_NUMBER author: ${author:-<unknown>}"
+          case "$(printf '%s' "$author" | tr '[:upper:]' '[:lower:]')" in
+            *copilot*|*swe-agent*) : ;;
+            *) echo "Not a coding-agent PR — nothing to do."; exit 0 ;;
+          esac
+
+          # --- 1. Label: automated-demo when a linked/closing issue is a demo-candidate -------
           linked=$(gh api graphql \
             -f query='
               query($owner:String!, $repo:String!, $pr:Int!) {
@@ -48,18 +67,57 @@ jobs:
                 }
               }' \
             -F owner="$OWNER" -F repo="$REPO" -F pr="$PR_NUMBER" \
-            --jq '[.data.repository.pullRequest.closingIssuesReferences.nodes[].labels.nodes[].name] | unique')
-
+            --jq '[.data.repository.pullRequest.closingIssuesReferences.nodes[].labels.nodes[].name] | unique' 2>/dev/null || echo '[]')
           echo "Linked issue labels: ${linked:-[]}"
 
+          is_demo=false
           if printf '%s' "$linked" | grep -q '"demo-candidate"'; then
-            # Ensure the label exists, then apply it.
-            gh label create automated-demo -R "$OWNER/$REPO" \
-              --color 5319e7 \
-              --description "Auto-generated Copilot feature demo" \
+            is_demo=true
+            gh label create automated-demo -R "$R" \
+              --color 5319e7 --description "Auto-generated Copilot feature demo" \
               --force >/dev/null 2>&1 || true
-            gh pr edit "$PR_NUMBER" -R "$OWNER/$REPO" --add-label automated-demo
+            gh pr edit "$PR_NUMBER" -R "$R" --add-label automated-demo || true
             echo "Labeled PR #$PR_NUMBER as automated-demo."
+          fi
+
+          # Fallback: an agent PR that touches demo-site/** is a demo even if the issue link
+          # isn't resolvable yet (e.g. the PR body's `Fixes #N` hasn't been indexed).
+          if [ "$is_demo" != "true" ] \
+             && gh pr view "$PR_NUMBER" -R "$R" --json files --jq '.files[].path' 2>/dev/null \
+                  | grep -q '^demo-site/'; then
+            is_demo=true
+          fi
+
+          # --- 2. Mark ready once the agent is done ------------------------------------------
+          is_draft=$(gh pr view "$PR_NUMBER" -R "$R" --json isDraft --jq '.isDraft' 2>/dev/null || echo "false")
+          if [ "$is_demo" != "true" ] || [ "$is_draft" != "true" ]; then
+            echo "Nothing to un-draft (is_demo=$is_demo, is_draft=$is_draft)."
+            exit 0
+          fi
+
+          # The agent records `copilot_work_started` / `copilot_work_finished` on the PR
+          # timeline. Un-drafting mid-build would trigger a premature review, so wait until the
+          # newest such event is `copilot_work_finished`. Poll briefly to absorb the few seconds
+          # by which the event can lag the push/rename that triggered this run.
+          latest_work_event() {
+            gh api "repos/$R/issues/$PR_NUMBER/timeline" --paginate \
+              -H "Accept: application/vnd.github+json" \
+              --jq '[.[] | select(.event|startswith("copilot_work"))] | sort_by(.created_at) | last | .event // ""' 2>/dev/null
+          }
+          finished=""
+          for i in $(seq 1 9); do
+            ev="$(latest_work_event)"
+            echo "poll $i/9: latest copilot_work event = '${ev:-<none>}'"
+            if [ "$ev" = "copilot_work_finished" ]; then finished=1; break; fi
+            sleep 10
+          done
+
+          if [ "${finished:-}" = "1" ]; then
+            if gh pr ready "$PR_NUMBER" -R "$R"; then
+              echo "Marked PR #$PR_NUMBER ready for review."
+            else
+              echo "gh pr ready returned non-zero (already ready?) — continuing."
+            fi
           else
-            echo "No demo-candidate linked issue; leaving PR untouched."
+            echo "Agent not finished yet (no copilot_work_finished). A later event will retry."
           fi
