@@ -54,11 +54,11 @@ jobs:
 
           if printf '%s' "$linked" | grep -q '"demo-candidate"'; then
             # Ensure the label exists, then apply it.
-            gh label create automated-demo \
+            gh label create automated-demo -R "$OWNER/$REPO" \
               --color 5319e7 \
               --description "Auto-generated Copilot feature demo" \
               --force >/dev/null 2>&1 || true
-            gh pr edit "$PR_NUMBER" --add-label automated-demo
+            gh pr edit "$PR_NUMBER" -R "$OWNER/$REPO" --add-label automated-demo
             echo "Labeled PR #$PR_NUMBER as automated-demo."
           else
             echo "No demo-candidate linked issue; leaving PR untouched."
