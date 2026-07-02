@@ -5,9 +5,9 @@ name: Demo PR autopilot (label + auto-ready)
 #   2. once the agent has FINISHED building (its most recent `copilot_work_*` timeline event is
 #      `copilot_work_finished`), marks the draft PR ready for review — so Copilot code review
 #      kicks off automatically, with no manual "Ready for review" click, and
-#   3. hands the ready PR off to the maintainer (assigns `edinc` + posts a note). There is no
-#      automated fix loop: Copilot code review runs, then a human reviews and merges (or re-runs
-#      the coding agent to address feedback).
+#   3. hands the ready PR off to the maintainer by assigning `edinc` (GitHub then notifies them of
+#      PR activity, including when Copilot code review posts its findings). There is no automated
+#      fix loop: Copilot code review runs, then a human reviews and merges (or re-runs the agent).
 #
 # This runs as an ordinary `pull_request` workflow. With the repo's Copilot policy
 # "Require approval for workflow runs" disabled, the coding agent's own pushes trigger it
@@ -122,11 +122,10 @@ jobs:
           if [ "${finished:-}" = "1" ]; then
             if gh pr ready "$PR_NUMBER" -R "$R"; then
               echo "Marked PR #$PR_NUMBER ready for review."
-              # Hand the finished demo off to the maintainer: assign edinc (who gets notified)
-              # and post a one-time state note. Copilot code review runs automatically now that
-              # the PR is ready; there is no automated fix loop — a human reviews and merges.
+              # Hand off to the maintainer by assigning edinc. GitHub then notifies edinc of PR
+              # activity — including when Copilot code review posts its findings — so no separate
+              # hand-off comment is needed (reacting to the review event itself would be gated).
               gh pr edit "$PR_NUMBER" -R "$R" --add-assignee edinc || true
-              gh pr comment "$PR_NUMBER" -R "$R" --body "🤖 Automated demo — built by the Copilot coding agent and marked ready for review. Copilot code review runs automatically; ready for maintainer review and merge." || true
             else
               echo "gh pr ready returned non-zero (already ready?) — continuing."
             fi
