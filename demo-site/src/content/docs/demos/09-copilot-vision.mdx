@@ -1,0 +1,103 @@
+---
+draft: false
+title: Copilot Vision
+description: Attach images and PDFs to prompts so Copilot can reason about design mockups, screenshots, and documentation.
+category: Demos
+order: 9
+capability: Vision
+duration: 2 min
+difficulty: Core
+icon: image
+summary: Implement UI from mockups or debug visual issues by showing Copilot what you see.
+---
+
+## What This Demonstrates
+
+**Copilot Vision** lets you attach images (JPEG, PNG, GIF, WebP) and PDFs directly to chat prompts in VS Code, GitHub Copilot CLI, GitHub.com, and mobile apps. Copilot can reason about design mockups, error screenshots, architecture diagrams, and documentation PDFs alongside your code — bridging the gap between visual specs and implementation.
+
+## Prerequisites
+
+- VS Code with GitHub Copilot Chat extension installed
+- A sample image or screenshot (an existing frontend screenshot, a simple mockup, or a schema diagram)
+- Repository open in workspace
+
+## Prompts
+
+### Prompt A — Implement UI from Mockup
+
+```text
+[Attach a mockup image showing a product detail page with image carousel, price, add-to-cart button, and specs table]
+
+Implement this product detail page UI in the frontend React app. Create the component in
+`services/frontend/src/pages/ProductDetail.tsx` using Tailwind CSS classes to match the
+mockup's layout and styling.
+```
+
+<Aside type="tip" title="Why this works">
+  Copilot Vision parses the mockup's layout, colors, spacing, and components, then generates React
+  + Tailwind code that matches the visual design. In the octo-eshop product catalog context, it can
+  infer carousel structure, price formatting, and the add-to-cart interaction pattern directly from
+  the image — no manual translation required.
+</Aside>
+
+**What to look for:**
+
+- Component structure matching the mockup layout (carousel, price block, CTA, specs table)
+- Tailwind classes matching colors, spacing, and responsive breakpoints from the image
+- Integration with existing routing and data fetching patterns in `services/frontend/src/`
+
+---
+
+### Prompt B — Debug Visual Issue from Screenshot
+
+```text
+[Attach a screenshot showing a broken layout or styling issue]
+
+This is the current state of the cart page. The item quantities are overlapping with the
+product names, and the total price is cut off. Identify the CSS/Tailwind issue and propose
+a fix.
+```
+
+<Aside type="tip" title="Why this works">
+  Copilot Vision analyzes the screenshot to identify layout issues — flexbox/grid
+  misconfiguration, z-index problems, overflow issues — and suggests targeted fixes. Showing
+  Copilot what you see is faster and more accurate than describing a visual bug in text. It can
+  pinpoint the exact Tailwind utility classes causing the problem in the cart component.
+</Aside>
+
+**What to look for:**
+
+- Accurate diagnosis of the layout issue from the screenshot (e.g., missing `min-w-0` on a flex child, `overflow-hidden` on the price container)
+- Specific CSS/Tailwind class changes (not generic advice)
+- Verification that the fix doesn't break other responsive breakpoints
+
+---
+
+### Prompt C — Extract Schema from Diagram
+
+```text
+[Attach a PDF or image of a database schema diagram showing tables, columns, relationships]
+
+Generate Prisma schema definitions for these tables in the order-service. Include all
+fields, types, relations, and indexes shown in the diagram.
+```
+
+<Aside type="tip" title="Why this works">
+  Copilot Vision reads ERDs, schema diagrams, and API documentation PDFs to generate code,
+  reducing manual transcription errors. For the octo-eshop order-service, it can produce complete
+  Prisma model blocks with `@relation` directives, `@@index` annotations, and correct field types
+  directly from a visual spec — no manual copying from the diagram.
+</Aside>
+
+**What to look for:**
+
+- Prisma schema matching table names, columns, and types from the diagram
+- Correct relationship definitions (`@relation` directives) between `Order`, `OrderItem`, and related models
+- Indexes and constraints matching the diagram (e.g., `@@index([userId])`, `@@index([status, createdAt])`)
+
+## Follow-Up Prompts
+
+- _"Update the mockup implementation to use our shared `@octo-eshop/types` for product data."_
+- _"Generate a Storybook story for this component showing the mockup state."_
+- _"Compare the current implementation with the mockup and list 3 differences."_
+- _"Add accessibility attributes to the generated component based on the mockup's visual hierarchy."_
