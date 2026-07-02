@@ -1,0 +1,111 @@
+---
+draft: false
+title: Copilot Vision
+description: Attach images and PDFs to chat prompts for visual reasoning alongside code
+category: Demos
+order: 9
+capability: Visual reasoning
+duration: 3 min
+difficulty: Core
+icon: image
+summary: Have Copilot analyze diagrams, screenshots, designs, and documentation
+---
+
+## What This Demonstrates
+
+**Copilot vision** lets you attach images (JPEG, PNG, GIF, WebP) and PDF documents directly to chat
+prompts so Copilot can reason about visual content alongside your code. This is now generally
+available across all Copilot plans — in VS Code, github.com, and the Copilot CLI.
+
+Use it to analyze architecture diagrams, UI wireframes, error screenshots, and API documentation
+alongside the actual codebase, getting contextual suggestions grounded in both the visual content
+and your code.
+
+## Prerequisites
+
+- VS Code with GitHub Copilot extension (or github.com / Copilot CLI)
+- An image or PDF to attach — for example:
+  - An architecture diagram showing the octo-eshop microservices
+  - A UI mockup or wireframe for a product page
+  - An error screenshot from a failing service
+
+## Prompts
+
+### Prompt A — Architecture Diagram → Health Check Endpoints
+
+Attach a PNG showing the octo-eshop microservices (frontend, user-service, product-service,
+cart-service, order-service, payment-service) with their databases and ask:
+
+```text
+I'm attaching our microservices architecture diagram. Looking at the services/ directory structure,
+identify which services are missing health check endpoints and generate a standardized /health
+endpoint for each one that returns service name, status, and database connectivity.
+```
+
+<Aside type="tip" title="Why this works">
+  Copilot reads the diagram to understand which services exist and their dependencies, then cross-
+  references the actual code in `services/` to spot the gap. The visual context lets it reason about
+  database connectivity per service — something it couldn't infer from code alone.
+</Aside>
+
+**What to look for:**
+
+- Copilot identifies which services in `services/` are missing a `/health` route
+- Generated handlers return `{ service, status, db }` in the project's `{ success, data }` response shape
+- Database check uses the existing Prisma client from each service's repository layer
+
+---
+
+### Prompt B — UI Wireframe → React Component
+
+Attach a wireframe for the bicycle product detail page (image carousel, add-to-cart button, specs
+table, price display) and ask:
+
+```text
+I'm attaching a wireframe for the bicycle product detail page. Generate the React component
+structure in services/frontend/src/components/ that matches this layout, using our existing
+Tailwind setup and the `@octo-eshop/types` for product data.
+```
+
+<Aside type="tip" title="Why this works">
+  Copilot maps each wireframe region to a React component, infers prop shapes from
+  `@octo-eshop/types`, and applies the Tailwind classes already in use across the project — bridging
+  the gap between a designer's mockup and production-ready code.
+</Aside>
+
+**What to look for:**
+
+- Component tree mirrors the wireframe layout (carousel, price block, specs table, CTA)
+- Props typed using `Product` from `@octo-eshop/types`
+- Tailwind utility classes consistent with existing components in `services/frontend/src/`
+
+---
+
+### Prompt C — Error Screenshot → Root Cause Analysis
+
+Attach a screenshot of a failing request in the browser DevTools (e.g., a 500 from the order
+service) and ask:
+
+```text
+I'm attaching a screenshot of a 500 error returned by the order-service. Looking at
+services/order-service/src/, identify the most likely root cause and suggest a fix, including any
+missing error handling or validation.
+```
+
+<Aside type="tip" title="Why this works">
+  Copilot reads the status code, URL path, and response body directly from the screenshot without
+  you having to transcribe them. Combined with the source code, it can pinpoint the exact controller
+  or service method responsible and generate a targeted fix.
+</Aside>
+
+**What to look for:**
+
+- Copilot extracts the route and error message from the screenshot
+- Root cause is traced to a specific file and function in `services/order-service/src/`
+- Suggested fix includes proper error handling following the project's `{ success, error }` pattern
+
+## Follow-Up Prompts
+
+- _"Based on this error screenshot, what's the root cause and how do I fix it?"_
+- _"Compare the wireframe with our current ProductCard component — what's different?"_
+- _"I'm attaching the payment provider's PDF API docs. Generate a typed client for the endpoints we need in payment-service."_
