@@ -12,7 +12,6 @@ Use this as the reference when creating or changing any agentic workflow in this
 - [Architecture](#architecture)
 - [Workflow Inventory](#workflow-inventory)
 - [End-to-End Flow](#end-to-end-flow)
-- [The Approval-Gate Problem (read this first)](#the-approval-gate-problem-read-this-first)
 - [Key Mechanisms & Gotchas](#key-mechanisms--gotchas)
 - [Design Decisions & Trade-offs](#design-decisions--trade-offs)
 - [Setup / Reproduction Checklist](#setup--reproduction-checklist)
@@ -24,35 +23,21 @@ Use this as the reference when creating or changing any agentic workflow in this
 
 ## Overview
 
-Every Wednesday a scheduled agent scans the GitHub Changelog `copilot` tag, decides which newly
-shipped features are worth a **hands-on demo**, and delegates building each one to the **Copilot
-coding agent**. From there everything is trigger-based and hands-off up to human review: the demo PR
-is auto-labeled, un-drafted the moment the agent finishes, assigned to the maintainer, and reviewed
-by Copilot code review. The maintainer just reviews and merges.
-
-**What it deliberately does _not_ do:** there is no automated review→fix loop. GitHub gates any
-workflow that reacts to a pull-request _review_ on a coding-agent PR (see
-[the gate problem](#the-approval-gate-problem-read-this-first)), so we hand the reviewed PR to a
-human instead of trying to auto-fix.
+Every Wednesday a scheduled agent scans the GitHub Changelog `copilot` tag, decides which new
+features are worth a **hands-on demo**, and delegates building each one to the **Copilot coding
+agent**. From there it's trigger-based and hands-off: the demo PR is auto-labeled, un-drafted the
+moment the agent finishes, assigned to the maintainer, and reviewed by Copilot code review — the
+maintainer just reviews and merges.
 
 ---
 
 ## Architecture
 
-```mermaid
-flowchart LR
-  A["Scout<br/>gh-aw · cron Wed 08:00 UTC"] -->|"create-issue<br/>assignees: copilot"| B["Coding agent<br/>copilot-swe-agent"]
-  B -->|"builds demo + prettier<br/>opens DRAFT PR, pushes"| C{"Autopilot labeler<br/>plain Actions · on agent push"}
-  C -->|"label · wait for copilot_work_finished<br/>· un-draft (PAT) · assign edinc"| D["Copilot code review<br/>(automatic)"]
-  D --> E["👤 Maintainer<br/>reviews & merges"]
-
-  classDef ok fill:#eaffea,stroke:#2a2;
-  class A,B,C,D ok;
-```
+![Copilot demo automation pipeline](diagrams/agentic-workflows-flow.png)
 
 The single most important property: **only the coding agent's _pushes_ trigger workflows without an
 approval gate.** Everything in the automated path is reachable from a push; anything that would have
-to react to a _review_ is not (and was removed).
+to react to a _review_ is not.
 
 ---
 
@@ -63,64 +48,24 @@ to react to a _review_ is not (and was removed).
 | **Demo Scout** | `.github/workflows/copilot-demo-scout.md` (+`.lock.yml`) | gh-aw (engine `copilot`, model `claude-sonnet-4.5`) | `schedule: "0 8 * * 3"` + `workflow_dispatch` | Scan changelog, judge demo-fit, file a build brief per feature and delegate to the coding agent. |
 | **Demo PR Autopilot** | `.github/workflows/copilot-demo-label.yml` | plain GitHub Actions | `pull_request` `[opened, reopened, edited, synchronize, review_requested]` | Label the PR, wait for the agent to finish, un-draft it, and assign the maintainer. |
 
-> A third workflow, `copilot-demo-review-loop.md` (event-triggered on `pull_request_review`), was
-> **removed** — it was permanently gated (`action_required`). See below.
-
 ---
 
 ## End-to-End Flow
 
-1. **Scout runs** (Wednesday, or `gh workflow run copilot-demo-scout.lock.yml`). It fetches the
-   changelog RSS (`https://github.blog/changelog/label/copilot/feed/`), keeps items from the last 14
-   days, judges which are demoable, and emits `create-issue` safe-outputs (`max: 3`,
-   `deduplicate-by-title`) labeled `demo-candidate, automated-demo` and **assigned to `copilot`**.
-   The brief instructs the agent to add `demo-site/src/content/docs/demos/NN-slug.mdx`, follow the
-   existing demo conventions, **run Prettier**, and put `Fixes #<issue>` in the PR body.
-2. **The coding agent builds** the demo on a `copilot/…` branch and opens a **draft** PR. While
-   working it fires a `copilot_work_started` timeline event; when done it fires
-   `copilot_work_finished` and drops the `[WIP]` title.
-3. **The autopilot labeler fires on the agent's push** (ungated). It confirms the PR is authored by
-   the coding agent, adds the `automated-demo` label, then **polls the PR timeline** until the newest
-   `copilot_work_*` event is `copilot_work_finished`.
-4. **It un-drafts the PR** (`gh pr ready`, using the user PAT) and **assigns `edinc`**.
-5. **Copilot code review runs automatically** on the now-ready PR (repo ruleset auto-requests it).
-6. **The maintainer is notified** as the PR assignee when the review posts, and reviews / merges (or
-   re-runs the coding agent to address feedback).
-
----
-
-## The Approval-Gate Problem (read this first)
-
-By default, **GitHub holds every Actions workflow triggered by a Copilot coding-agent pull request
-for manual approval** ("Approve and run", status `action_required`). This is the biggest obstacle to
-a hands-off pipeline and is **not** the same as the fork / first-time-contributor gate.
-
-### The setting that removes it
-
-**Repository** → Settings → Code & automation → **Copilot → Cloud agent → "Actions workflow
-approval"** → turn **OFF** "Require approval for workflow runs". Also keep **"Allow automations" ON**.
-
-- This is a **repo-level** setting and requires repo admin.
-- It is _separate_ from Settings → Actions → General and from org Policies "Restrict actors" — those
-  do **not** fix this gate.
-- Set it on the **canonical** repo (`codecurrent-sandbox/octo-eshop-demo`); the `edinc/…` remote is a
-  redirect and settings writes don't follow redirects.
-
-### The critical limitation (why there's no fix loop)
-
-GitHub's own wording: *"workflows run automatically when Copilot **pushes**, except when the push
-comes from an automation."* Consequences we verified live:
-
-- ✅ **Push-triggered** workflows on the agent's PR now run automatically (the autopilot labeler on
-  `synchronize`/`opened`, and CI).
-- ❌ **Review-triggered** workflows (`pull_request_review`) stay **gated** — a review is not a push.
-  There is **no un-gated event** that fires _after_ Copilot code review. Reacting to a review is
-  therefore only possible via a **scheduled poller** or a **manual approval click**.
-- ⚠️ A commit **pushed by one of our workflows** counts as "an automation" and will _not_ itself
-  trigger further workflow runs.
-
-This is why the review→fix loop and a "review is done" hand-off comment were dropped: both would have
-to react to the review event, which cannot be a no-click trigger.
+1. **Scout runs** (Wed, or `gh workflow run copilot-demo-scout.lock.yml`): fetches the changelog RSS,
+   keeps items from the last 14 days, judges demo-fit, and files `create-issue` briefs (`max: 3`,
+   `deduplicate-by-title`, labels `demo-candidate, automated-demo`) **assigned to `copilot`**. Each
+   brief tells the agent to add `demo-site/src/content/docs/demos/NN-slug.mdx`, follow the existing
+   demos, **run Prettier**, and put `Fixes #<issue>` in the PR body.
+2. **The coding agent builds** on a `copilot/…` branch and opens a **draft** PR — firing
+   `copilot_work_started`, then `copilot_work_finished` (and dropping `[WIP]`) when done.
+3. **The autopilot labeler fires on the agent's push** (ungated): confirms the agent is the author,
+   labels the PR, then **polls the timeline** until the newest `copilot_work_*` event is
+   `copilot_work_finished`.
+4. **It un-drafts the PR** (`gh pr ready`, user PAT) and **assigns `edinc`**.
+5. **Copilot code review runs automatically** (repo ruleset auto-requests it on ready PRs).
+6. **The maintainer** is notified as assignee when the review posts, and reviews / merges (or re-runs
+   the agent).
 
 ---
 
@@ -128,6 +73,8 @@ to react to the review event, which cannot be a no-click trigger.
 
 | Topic | What to know |
 |---|---|
+| **The approval gate (biggest gotcha)** | By default GitHub holds *every* workflow on a coding-agent PR for manual approval (`action_required`). Turn it off at repo **Settings → Copilot → Cloud agent → "Require approval for workflow runs" = OFF** (keep **"Allow automations" = ON**) — repo-admin only, and separate from the fork / Actions-General settings. |
+| **Only _pushes_ are ungated, not _reviews_** | Disabling that gate ungates workflows triggered by the agent's **pushes**, not **reviews**: `pull_request_review` stays gated, and a commit pushed by your own workflow counts as "an automation" that won't trigger further runs. So a review-timed action needs a scheduled poller or a click — here the human hand-off is an assignment at un-draft time instead. |
 | **Delegating to the coding agent** | Assign an issue/PR to the bot `copilot-swe-agent` (node id `BOT_kgDOC9w8XQ`). gh-aw does this with `create-issue { assignees: [copilot] }`; to do it by hand use the GraphQL `replaceActorsForAssignable` mutation. |
 | **You need a user PAT, not `GITHUB_TOKEN`** | The default Actions `GITHUB_TOKEN` **cannot trigger the coding agent** and **cannot `markPullRequestReadyForReview`** ("Resource not accessible by integration"). Store a user PAT as the secret **`GH_AW_AGENT_TOKEN`** and use it for delegation _and_ for `gh pr ready`. |
 | **"Agent is done" signal** | The PR timeline carries `copilot_work_started` / `copilot_work_finished` events. The agent is finished when the **newest** `copilot_work_*` event is `copilot_work_finished`. Don't rely on the `[WIP]` title alone. |
@@ -144,18 +91,16 @@ to react to the review event, which cannot be a no-click trigger.
 
 ## Design Decisions & Trade-offs
 
-- **No automated fix loop.** Reacting to Copilot's review is gated (see above). The coding agent also
-  self-reviews during its build (repo "validation tools" setting), so demos arrive fairly clean. We
-  hand the reviewed PR to a human instead.
+- **Human review after Copilot's review.** Reacting to a review automatically is gated (see the
+  gotchas above), so the pipeline hands the reviewed PR to a human. The agent self-reviews during its
+  build (repo "validation tools" setting), so demos arrive fairly clean.
 - **Hand-off = assignment, not a comment.** Assigning `edinc` at un-draft time makes GitHub notify
-  them of PR activity — including when the review posts — so the "findings are in" signal arrives with
-  the findings, no gated review-trigger required. (A review-timed _comment_ would need a scheduled
-  poster or a click.)
-- **Scout is the only schedule.** Everything after it is trigger-based. A review-timed action is the
-  one thing that fundamentally cannot be a no-click trigger — it's schedule-or-click by nature.
-- **Engine model pinned to `claude-sonnet-4.5`.** The default/other models 400'd on this
-  subscription. Copilot Opus 4.8 is not available to any GitHub cloud agent (coding-agent picker caps
-  at Opus 4.7).
+  them when the review posts — so "findings are in" needs no gated review-trigger. (A review-timed
+  _comment_ would need a poller or a click.)
+- **Scout is the only schedule;** everything after is trigger-based. A review-timed action is the one
+  thing that can't be a no-click trigger — schedule-or-click by nature.
+- **Engine model pinned to `claude-sonnet-4.5`.** Other models 400'd on this subscription; Copilot
+  Opus 4.8 isn't available to any GitHub cloud agent (coding-agent picker caps at Opus 4.7).
 
 ---
 
