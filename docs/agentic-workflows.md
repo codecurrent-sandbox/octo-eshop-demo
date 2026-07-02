@@ -46,7 +46,6 @@ flowchart LR
   C -->|"label · wait for copilot_work_finished<br/>· un-draft (PAT) · assign edinc"| D["Copilot code review<br/>(automatic)"]
   D --> E["👤 Maintainer<br/>reviews & merges"]
 
-  classDef gated fill:#ffecec,stroke:#e00;
   classDef ok fill:#eaffea,stroke:#2a2;
   class A,B,C,D ok;
 ```
@@ -136,7 +135,7 @@ to react to the review event, which cannot be a no-click trigger.
 | **`pull_request` uses the PR _head_ branch's workflow** | A `pull_request`-triggered workflow runs the version of the workflow file on the **PR branch**, not `main`. Commit workflow changes to `main` **before** the agent branches a new PR, or they won't apply to in-flight PRs. |
 | **CI gates tests behind lint** | `ci.yml`'s `Build & Test` job has `needs: lint`. The `Lint & Format` job runs `prettier --check .`. If the agent emits an unformatted file, lint fails → **all test jobs are skipped** → the summary shows "Total tests: 0". Fix: the scout brief **requires the agent to `prettier --write`** its output. |
 | **Canonical repo & redirects** | The repo is org-owned as `codecurrent-sandbox/octo-eshop-demo`; `edinc/octo-eshop-demo` redirects. `GET` follows redirects, but **`POST`/`PUT`/`gh workflow run` do not** — always pass `-R codecurrent-sandbox/octo-eshop-demo` for writes. |
-| **gh-aw compile model** | The markdown **body is read from the `.md` at runtime**; the compiled `.lock.yml` only stores a `body_hash` in its metadata header. After editing a `.md`, run `gh aw compile <name>` and **commit both** the `.md` and `.lock.yml` (an "activation" step checks the lock matches). |
+| **gh-aw compile model** | The markdown **body is read from the `.md` at runtime**; the compiled `.lock.yml` stores content hashes (a `frontmatter_hash` + `body_hash`) in its metadata header, not the body text. After editing a `.md`, run `gh aw compile <name>` and **commit both** the `.md` and `.lock.yml` (an "activation" step checks the lock matches). |
 | **Concurrency cancellations are normal** | With `cancel-in-progress: false`, when several PR events queue in the same concurrency group GitHub keeps the in-progress run + the latest pending one and **cancels intermediate pending runs**. Those `cancelled` entries are expected; the completing run still does the work (steps are idempotent). |
 | **Bot login is inconsistent** | The agent's author appears as `app/copilot-swe-agent` via the API but differently in raw webhook payloads. Scope by resolving the author with `gh pr view --json author` and matching loosely (`*copilot*`/`*swe-agent*`) rather than an exact `if:` on `pull_request.user.login`. |
 | **Draft PRs aren't reviewed** | The ruleset has `review_draft_pull_requests: false`, so Copilot won't review a draft. Un-drafting is what kicks off review — hence the autopilot's core job. |
