@@ -6,6 +6,10 @@ description: >-
 on:
   pull_request_review:
     types: [submitted]
+  # The trigger actor is Copilot code review (a bot); gh-aw's default activation gate only
+  # allows admin/maintainer/write humans, so allowlist this specific bot. The `if:` below
+  # still restricts execution to reviews authored by it.
+  bots: ["copilot-pull-request-reviewer"]
 
 # Cheap native gate: only run for a Copilot code review, and never once this PR has been
 # marked exhausted (the mechanical stop for the fix loop). The "is this an automated demo
