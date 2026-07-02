@@ -1,0 +1,74 @@
+---
+draft: false
+title: Copilot Vision
+description: Attach screenshots and PDFs in Copilot Chat to debug UI issues and implement spec-driven updates.
+category: Demos
+order: 9
+capability: Vision chat
+duration: 2 min
+difficulty: Starter
+icon: layout
+summary: Use image and PDF attachments so Copilot can reason over UI evidence and product docs.
+---
+
+## What This Demonstrates
+
+**Copilot Vision** lets you attach images and PDFs in Copilot Chat so Copilot can reason over real
+artifacts — like a broken product page screenshot or a bike spec document — and turn them into
+concrete code changes.
+
+## Prerequisites
+
+- GitHub Copilot Chat (web or VS Code) with image/PDF attachment support
+- This repository checked out locally
+- A screenshot or mockup from `services/frontend/`
+- A product requirements PDF (for example, geometry/spec updates)
+
+## Prompts
+
+### Prompt A — Debug from Screenshot
+
+```text
+I attached a screenshot of a broken bike product page from `services/frontend`.
+Analyze what looks wrong (layout, spacing, missing data, or visual regressions),
+then propose the smallest fix in this repo. Point me to likely files and a
+step-by-step patch plan.
+```
+
+<Aside type="tip" title="Why this works">
+  Copilot can inspect the visual evidence first, then map issues to the React UI structure in
+  `services/frontend/` so your fix is focused instead of trial-and-error.
+</Aside>
+
+**What to look for:**
+
+- Precise identification of what is visually broken
+- File-level mapping (components/styles/routes) in `services/frontend/`
+- A minimal patch plan instead of a broad rewrite
+
+---
+
+### Prompt B — Implement from PDF Spec
+
+```text
+I attached a PDF product spec for a new bicycle model. Extract the key fields we
+should support in `services/product-service` and the UI in `services/frontend`.
+Then draft exact TypeScript/interface updates and API response changes to add the
+new attributes safely.
+```
+
+<Aside type="tip" title="Why this works">
+  Copilot reads the structured requirements directly from the PDF and translates them into repository
+  changes across API models and frontend rendering.
+</Aside>
+
+**What to look for:**
+
+- Correct extraction of product attributes from the PDF
+- Schema/type updates aligned across `product-service` and frontend
+- Attention to API response consistency (`success/data/error/meta`)
+
+## Follow-Up Prompts
+
+- _"Generate the exact patch for the frontend files first, then we will update the backend."_
+- _"Which of the proposed fields should be optional to avoid breaking existing products?"_
