@@ -58,3 +58,6 @@ tfplan
 # key.
 codespaces-vpn-secrets/
 .playwright-mcp/
+
+# gh-aw run logs (generated, not source)
+.github/aw/logs/
