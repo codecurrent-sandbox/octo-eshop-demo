@@ -1,0 +1,117 @@
+---
+draft: false
+title: C++ Language Server Skill
+description: Automate C++ project setup with the compile commands generation skill in Copilot CLI
+category: Demos
+order: 11
+capability: Language server setup
+duration: 2 min
+difficulty: Intermediate
+icon: settings
+summary: Generate compile_commands.json for CMake and MSBuild projects via Copilot CLI
+---
+
+## What This Demonstrates
+
+Language servers need configuration files like `compile_commands.json` to provide precise semantic intelligence — symbol navigation, diagnostics, and compiler-aware code changes. Without this file, a language server can only offer best-effort analysis based on heuristics.
+
+The **Microsoft C++ Language Server** plugin for Copilot CLI includes a built-in **setup skill** that automates `compile_commands.json` generation for CMake and MSBuild projects. Instead of manually running CMake with special flags or wiring up MSBuild separately, you ask Copilot and the skill handles the configuration.
+
+## Prerequisites
+
+- Copilot CLI installed and authenticated
+- A C++ project (CMake or MSBuild) in your workspace
+
+For this demo you can reference a hypothetical example, or create a minimal project to follow along:
+
+```bash
+mkdir -p /tmp/gh-aw/agent/hello-cpp && cd /tmp/gh-aw/agent/hello-cpp
+cat > CMakeLists.txt <<'EOF'
+cmake_minimum_required(VERSION 3.20)
+project(HelloCpp)
+add_executable(hello main.cpp)
+EOF
+echo '#include <iostream>\nint main() { std::cout << "Hello\\n"; }' > main.cpp
+```
+
+## Prompts
+
+### Prompt A — Install the plugin
+
+```text
+Install the C++ language server plugin from the Copilot Plugins marketplace using:
+/plugin install cpp-language-server@copilot-plugins
+
+Then list all installed plugins to confirm it's active.
+```
+
+<Aside type="tip" title="Plugin marketplace">
+  Copilot CLI plugins extend what Copilot can do in your terminal. Installing the C++ language
+  server plugin also registers the **generate compile commands** skill, making it available for
+  subsequent prompts in the same session.
+</Aside>
+
+**What to look for:**
+
+- Plugin installed successfully via Copilot Plugins marketplace
+- `cpp-language-server` appears in the installed plugins list
+- Skill `generate-compile-commands` is listed as available
+
+---
+
+### Prompt B — Generate compile_commands.json
+
+```text
+For a CMake project, use the generate compile commands skill to create the compile_commands.json file. Say:
+"Regenerate compile commands for this CMake project"
+
+Explain what files were generated and where they're located.
+```
+
+<Aside type="tip" title="What the skill automates">
+  Manually generating `compile_commands.json` for a CMake project requires running:
+  `cmake -DCMAKE_EXPORT_COMPILE_COMMANDS=TRUE -B build`
+  and then symlinking or copying the file into the project root. For MSBuild, the process is
+  different entirely. The skill handles both, detecting the build system automatically.
+</Aside>
+
+**What to look for:**
+
+- `compile_commands.json` generated in the build directory
+- Skill detects the build system (CMake vs MSBuild) automatically
+- Skill handles both CMake and MSBuild projects automatically
+
+---
+
+### Prompt C — Semantic intelligence after setup
+
+```text
+Now that compile_commands.json exists, show me how the language server provides better semantic intelligence: navigate to a function definition, show diagnostics for a missing include, and suggest fixes that respect compiler flags.
+```
+
+<Aside type="tip" title="Why compile_commands.json matters">
+  With `compile_commands.json` in place, the language server knows the exact compiler flags,
+  include paths, and preprocessor definitions for every translation unit. Diagnostics become
+  compiler-accurate — not just lint warnings — and Go-to-Definition follows the same include
+  resolution path the compiler uses. The language server watches for changes to
+  `compile_commands.json`, so updates take effect without restarting.
+</Aside>
+
+**What to look for:**
+
+- Language server now provides precise symbol navigation and compiler-aware diagnostics
+- Missing include errors surface with the correct `-I` paths from the build system
+- Suggested fixes respect compiler flags (e.g., C++ standard version, platform defines)
+
+<Aside type="tip" title="Skills as reusable setup logic">
+  This pattern extends to other language servers and build systems. Skills can encapsulate
+  project-specific setup logic — wrapping the exact commands a developer would otherwise need to
+  look up — and expose them as natural-language prompts. The C++ setup skill is a first example;
+  expect similar skills for Rust (`rust-analyzer`), Java (`jdtls`), and others.
+</Aside>
+
+## Follow-Up Prompts
+
+- _"What happens if I add a new source file to CMakeLists.txt? Do I need to regenerate?"_
+- _"Can this skill work with a custom build system (e.g., Bazel, Makefile)?"_
+- _"Show me the difference in diagnostic quality before and after compile_commands.json"_
