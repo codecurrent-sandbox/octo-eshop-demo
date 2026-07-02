@@ -8,7 +8,9 @@ on:
     - cron: "0 8 * * 3" # Wednesdays 08:00 UTC
   workflow_dispatch:
 
-engine: copilot
+engine:
+  id: copilot
+  model: claude-sonnet-4.5
 
 permissions:
   contents: read

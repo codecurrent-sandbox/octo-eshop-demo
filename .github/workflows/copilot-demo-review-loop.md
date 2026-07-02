@@ -14,7 +14,9 @@ if: >-
   ${{ github.event.review.user.login == 'copilot-pull-request-reviewer[bot]'
       && !contains(github.event.pull_request.labels.*.name, 'demo-review-exhausted') }}
 
-engine: copilot
+engine:
+  id: copilot
+  model: claude-sonnet-4.5
 
 permissions:
   contents: read
