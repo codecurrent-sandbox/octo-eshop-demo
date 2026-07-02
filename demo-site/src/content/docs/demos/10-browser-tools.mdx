@@ -1,0 +1,105 @@
+---
+draft: false
+title: Browser Tools
+description: Copilot agents can browse live web applications, capture screenshots, and report findings
+category: Demos
+order: 10
+capability: Web browsing
+duration: 3 min
+difficulty: Intermediate
+icon: globe
+summary: Test live web apps, debug production issues, and verify deployments with browser automation
+---
+
+## What This Demonstrates
+
+**Copilot browser tools** let agents drive a real browser directly from VS Code. Agents can open the octo-eshop frontend, click through the bicycle catalog, fill out forms, capture screenshots, read console errors, and inspect network requests — all without leaving your editor. This makes it straightforward to test live deployments, diagnose production issues, and verify end-to-end flows against the actual running application.
+
+## Prerequisites
+
+- VS Code with GitHub Copilot extension (browser tools are on by default since GA)
+- The octo-eshop frontend running locally:
+  ```bash
+  cd services/frontend && npm run dev
+  ```
+  or a deployed URL (staging or production)
+
+## Prompts
+
+### Prompt A — Product Catalog Testing
+
+```text
+Open http://localhost:5173 in the browser and test the bicycle product catalog.
+Click on a product, verify the product detail page loads correctly, and capture
+a screenshot of any console errors. Report which API endpoints are called and
+whether they return the expected JSON structure (success/data/error/meta).
+```
+
+<Aside type="tip" title="You control browser access">
+  Agents can only see tabs you explicitly share with them. Open the tab first,
+  then tell Copilot which tab to use. This keeps your personal browsing and any
+  stored credentials completely separate from the agent session.
+</Aside>
+
+**What to look for:**
+
+- Agent opens the browser, navigates to localhost, and clicks through the product catalog
+- Screenshots captured showing console output and network requests
+- Structured report of API responses and JSON validation against the `success/data/error/meta` project standard
+- Identification of any UI bugs (broken links, missing images, layout issues)
+
+---
+
+### Prompt B — End-to-End Cart Flow
+
+```text
+Navigate to http://localhost:5173, add a bicycle to the cart, proceed to
+checkout, and capture each step with screenshots. Verify that cart state
+persists correctly and that the order summary shows the right product details
+and pricing. Report any UI issues or failed API calls to the cart-service or
+order-service.
+```
+
+<Aside type="tip" title="Agent tabs are isolated">
+  The browser session used by the agent has no cookies or local storage from
+  your personal browsing. This gives you a clean baseline — identical to what a
+  new user would experience — which is ideal for validating registration flows,
+  empty-cart states, and first-run UX.
+</Aside>
+
+**What to look for:**
+
+- Cart state persists across page navigations (backed by the Redis cart-service)
+- Order summary displays correct product names, quantities, and prices
+- API calls to `/api/cart` and `/api/orders` return `success: true` with properly shaped data
+- Any `4xx`/`5xx` responses or JavaScript exceptions surfaced in the agent report
+
+---
+
+### Prompt C — Mobile Responsive Check
+
+```text
+Open http://localhost:5173 and test the mobile viewport (375px width). Verify
+that the navigation menu collapses correctly, product cards stack in a single
+column, and all Add-to-Cart buttons remain accessible. Take screenshots at the
+375px and 768px breakpoints.
+```
+
+<Aside type="tip" title="Useful beyond manual testing">
+  Browser tools let you verify deployments, test UX flows, and debug production
+  issues without writing test scripts. Combine this with the Playwright follow-up
+  prompt below to turn an ad-hoc check into a repeatable automated test.
+</Aside>
+
+**What to look for:**
+
+- Navigation collapses to a hamburger or drawer menu at 375 px
+- Product cards stack vertically without horizontal overflow
+- Touch targets (buttons, links) meet minimum size guidelines
+- No layout shifts or clipped text at either breakpoint
+
+## Follow-Up Prompts
+
+- _"Test the same cart flow in incognito mode to verify it works without cached data."_
+- _"Compare the staging and production deployments — what's different in the product catalog?"_
+- _"Generate a Playwright test script that automates the add-to-cart and checkout flow."_
