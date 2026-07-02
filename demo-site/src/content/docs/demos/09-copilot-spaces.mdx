@@ -1,0 +1,67 @@
+---
+draft: false
+title: Copilot Spaces
+description: Curate and share focused context bundles so Copilot answers stay grounded in your code.
+category: Demos
+order: 9
+capability: Curated context
+duration: 2 min
+difficulty: Core
+icon: layers
+summary: Bundle checkout code and docs into a shareable Space for grounded answers.
+---
+
+## What This Demonstrates
+
+**Copilot Spaces** let you curate shareable context bundles (repos, files, docs, free text) so
+Copilot Chat answers are grounded in the exact parts of the platform you want, like checkout flow
+logic across `services/cart-service/`, `services/order-service/`, and `demo-site/`.
+
+## Prerequisites
+
+- GitHub repository access with Copilot enabled
+- A Space that includes this repository and selected files/docs
+- GitHub web UI or VS Code Copilot Chat
+
+## Prompts
+
+### Prompt A — Checkout Flow Grounding
+
+```text
+In my Copilot Space, use only the curated checkout context from
+`services/cart-service/`, `services/order-service/`, and `demo-site/`.
+Map the end-to-end checkout flow from cart update to order creation, and call
+out where we should validate API response shape (`success/data/error/meta`).
+```
+
+<Aside type="tip" title="Why this works">
+  Spaces constrain context to exactly the checkout surfaces you picked, which reduces hallucinated
+  cross-service assumptions and keeps the flow explanation aligned to this repo's structure.
+</Aside>
+
+**What to look for:**
+
+- A step-by-step flow that references cart and order services accurately
+- Response-shape checks tied to the project's `success/data/error/meta` convention
+- Explicit mention of context boundaries from the curated Space
+
+---
+
+### Prompt B — Shareable Team Context
+
+```text
+Using this Space's curated files and notes, propose a handoff brief for a new
+engineer joining checkout work. Include: key folders, likely touchpoints in
+`services/*` and `demo-site/`, and 3 safe starter tasks.
+```
+
+<Aside type="tip" title="Why this works">
+  Shared Spaces make onboarding repeatable: every teammate gets the same grounded context bundle
+  instead of relying on ad-hoc tribal knowledge.
+</Aside>
+
+**What to look for:**
+
+- Recommendations that stay inside the curated repository areas
+- Practical starter tasks tied to real folders in this monorepo
+- Clear separation between known context and suggested next exploration
