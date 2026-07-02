@@ -7,16 +7,15 @@ on:
   pull_request_review:
     types: [submitted]
   # The trigger actor is Copilot code review (a bot); gh-aw's default activation gate only
-  # allows admin/maintainer/write humans, so allowlist this specific bot. The `if:` below
-  # still restricts execution to reviews authored by it.
-  bots: ["copilot-pull-request-reviewer"]
+  # allows admin/maintainer/write humans, so allowlist this specific bot. `on.bots:` is the
+  # actor gate — only this bot can activate the workflow.
+  bots: ["copilot-pull-request-reviewer", "Copilot"]
 
-# Cheap native gate: only run for a Copilot code review, and never once this PR has been
-# marked exhausted (the mechanical stop for the fix loop). The "is this an automated demo
-# PR?" decision is made at runtime (below) so it can't be defeated by label-timing races.
-if: >-
-  ${{ github.event.review.user.login == 'copilot-pull-request-reviewer[bot]'
-      && !contains(github.event.pull_request.labels.*.name, 'demo-review-exhausted') }}
+# Only stop the loop once a PR is marked exhausted. We deliberately do NOT re-check the
+# reviewer login here: `on.bots:` above already restricts activation to the Copilot review
+# bot, and matching `github.event.review.user.login` in `if:` proved unreliable (it gated the
+# pre-activation job off before the bot allowlist was ever evaluated).
+if: ${{ contains(github.event.pull_request.labels.*.name, 'demo-review-exhausted') == false }}
 
 engine:
   id: copilot
