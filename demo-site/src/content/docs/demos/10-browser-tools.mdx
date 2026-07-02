@@ -1,0 +1,103 @@
+---
+draft: false
+title: Browser Tools
+description: Let agents drive a real browser to test the frontend, capture errors, and debug UI issues.
+category: Demos
+order: 10
+capability: Browser automation
+duration: 3 min
+difficulty: Intermediate
+icon: monitor
+summary: Agent-driven browser testing — navigate, click, inspect, and debug the live frontend.
+---
+
+## What This Demonstrates
+
+**Browser Tools for GitHub Copilot in VS Code** lets agents drive a real browser against your live web app — navigating pages, clicking buttons, filling forms, capturing console errors, taking screenshots, and reporting findings back into the chat. This enables automated testing, debugging, and validation workflows without any manual browser interaction, making it ideal for verifying the octo-eshop frontend across its full microservices stack.
+
+## Prerequisites
+
+- VS Code with GitHub Copilot Chat extension installed and Browser Tools enabled (on by default since GA)
+- Frontend dev server running (`docker-compose up -d` or `npm run dev --workspace=services/frontend`)
+- Repository open in workspace
+
+## Prompts
+
+### Prompt A — Test Checkout Flow
+
+```text
+Start the browser, navigate to http://localhost:3000 and test the complete checkout flow:
+browse products → add to cart → view cart → checkout → payment form. Capture any console
+errors, broken links, or UI issues. Take a screenshot of each major step.
+```
+
+<Aside type="tip" title="Why this works">
+  The agent opens a real browser, automates the entire user flow, and captures console errors along
+  the way — 404s, JS exceptions, and failed API calls to product-service, cart-service,
+  order-service, and payment-service. Issues are reported with screenshots and actionable fixes,
+  making regression testing faster than any manual walkthrough.
+</Aside>
+
+**What to look for:**
+
+- Browser opens and navigates to the frontend at `services/frontend/`
+- Agent completes each step of the checkout flow automatically
+- Console errors are captured and reported (e.g., CORS issues, 500 errors from backend services)
+- Screenshots show the UI state at each step
+- Issues are summarized with actionable fixes (e.g., "cart-service returned 500 on POST /api/cart")
+
+---
+
+### Prompt B — Validate Responsive Design
+
+```text
+Open the browser at http://localhost:3000, resize the viewport to mobile (375x667), tablet
+(768x1024), and desktop (1920x1080). For each breakpoint, take a screenshot and check:
+navigation menu collapses correctly, product grid adjusts columns, images don't overflow,
+buttons remain tappable.
+```
+
+<Aside type="tip" title="Why this works">
+  The agent tests all three responsive breakpoints automatically, capturing visual regressions —
+  overlapping text, cut-off images, inaccessible buttons — that are hard to catch in code review.
+  This is especially useful for validating the Tailwind responsive utilities used throughout
+  `services/frontend/src/`.
+</Aside>
+
+**What to look for:**
+
+- Screenshots at all three breakpoints
+- Identification of layout issues (e.g., "navigation menu doesn't collapse on mobile")
+- Specific CSS/Tailwind fixes (e.g., "add `md:grid-cols-3` to product grid")
+
+---
+
+### Prompt C — Accessibility Audit
+
+```text
+Navigate to http://localhost:3000 and run an accessibility audit: check for missing alt text on
+images, form labels, ARIA roles, keyboard navigation (tab through all interactive elements), and
+color contrast issues. Report findings with severity (critical/medium/low) and suggest fixes.
+```
+
+<Aside type="tip" title="Why this works">
+  The agent combines browser DevTools accessibility audits with live keyboard navigation testing and
+  WCAG checks. This is far faster than manual a11y testing and catches issues before code review —
+  particularly important for product images in the catalog, checkout forms, and cart buttons that
+  need to be accessible to all users.
+</Aside>
+
+**What to look for:**
+
+- Missing alt text on product images
+- Form inputs without labels or ARIA attributes (e.g., checkout form fields)
+- Tab order issues (e.g., cart button not reachable by keyboard)
+- Color contrast violations (e.g., gray text on light gray background)
+- Severity-ranked findings with concrete fixes (e.g., "add `aria-label='Add to cart'` to cart button")
+
+## Follow-Up Prompts
+
+- _"Test the cart update flow (change quantity, remove items) and verify the API calls to cart-service succeed."_
+- _"Compare the live frontend with the Figma mockup [attach image] and list visual differences."_
+- _"Generate Playwright test cases for the checkout flow based on what you just tested."_
+- _"Debug why the 'Apply Coupon' button doesn't work — inspect the console and network tab."_
