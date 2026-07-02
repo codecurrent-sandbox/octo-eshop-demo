@@ -15,8 +15,9 @@ name: Demo PR autopilot (label + auto-ready)
 
 on:
   pull_request:
-    # `review_requested` fires the moment the agent finishes and auto-requests Copilot review —
-    # our most reliable post-completion trigger. The others catch earlier/other transitions.
+    # `synchronize` (each agent push) plus the timeline poll below are the workhorse — the agent's
+    # final push reliably drives completion. `review_requested` (fired when Copilot review is
+    # requested around completion) is an extra fast-path trigger; the rest catch earlier states.
     types: [opened, reopened, edited, synchronize, review_requested]
 
 permissions:
@@ -80,11 +81,6 @@ jobs:
           is_demo=false
           if printf '%s' "$linked" | grep -q '"demo-candidate"'; then
             is_demo=true
-            gh label create automated-demo -R "$R" \
-              --color 5319e7 --description "Auto-generated Copilot feature demo" \
-              --force >/dev/null 2>&1 || true
-            gh pr edit "$PR_NUMBER" -R "$R" --add-label automated-demo || true
-            echo "Labeled PR #$PR_NUMBER as automated-demo."
           fi
 
           # Fallback: an agent PR that touches demo-site/** is a demo even if the issue link
@@ -93,6 +89,15 @@ jobs:
              && gh pr view "$PR_NUMBER" -R "$R" --json files --jq '.files[].path' 2>/dev/null \
                   | grep -q '^demo-site/'; then
             is_demo=true
+          fi
+
+          # Label any detected demo PR — via EITHER detection path above.
+          if [ "$is_demo" = "true" ]; then
+            gh label create automated-demo -R "$R" \
+              --color 5319e7 --description "Auto-generated Copilot feature demo" \
+              --force >/dev/null 2>&1 || true
+            gh pr edit "$PR_NUMBER" -R "$R" --add-label automated-demo || true
+            echo "Labeled PR #$PR_NUMBER as automated-demo."
           fi
 
           # --- 2. Mark ready once the agent is done ------------------------------------------
