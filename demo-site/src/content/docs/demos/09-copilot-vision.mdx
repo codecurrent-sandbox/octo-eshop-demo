@@ -1,0 +1,72 @@
+---
+draft: false
+title: Copilot Vision
+description: Attach screenshots, mockups, and PDF specs to Copilot Chat so Copilot can reason over visual context.
+category: Demos
+order: 9
+capability: Vision
+duration: 2 min
+difficulty: Starter
+icon: image
+summary: Attach images and PDFs to chat so Copilot reasons over visual context.
+---
+
+## What This Demonstrates
+
+**Copilot Vision** lets you attach images (PNG, JPEG, GIF, WebP) and PDFs directly to Copilot Chat. Copilot reads the visual content and uses it as context when answering questions or generating code — no manual description required.
+
+## Prerequisites
+
+- VS Code with the GitHub Copilot Chat extension (or GitHub.com Copilot Chat)
+- A screenshot of the running octo-eshop frontend (e.g. a broken product page) **or** the PDF product specification at `services/product-service/docs/product-spec.pdf`
+
+## Prompts
+
+### Prompt A — Debug a Broken UI from a Screenshot
+
+```text
+I've attached a screenshot of the product listing page in our octo-eshop storefront.
+The product cards are overflowing their grid container on mobile.
+Identify the layout issue and suggest a CSS fix in
+services/frontend/src/components/ProductCard.tsx (or its associated styles).
+```
+
+<Aside type="tip" title="Why this works">
+  Copilot reads the screenshot and correlates the visual symptom — cards overflowing — with the
+  relevant component. You get a targeted fix without having to describe the bug in prose.
+</Aside>
+
+**What to look for:**
+
+- Copilot referencing specific layout properties (e.g. `min-width`, `overflow`, grid column settings)
+- Suggested change scoped to the correct file rather than a generic CSS snippet
+- Explanation of _why_ the overflow occurs, derived from the visual
+
+---
+
+### Prompt B — Implement a Feature from a PDF Spec
+
+```text
+Attached is the product specification PDF for our new "Trail Blazer" bicycle SKU.
+Using the field names and data types in the spec, generate a Prisma migration and
+update the product-service seed file (services/product-service/prisma/seed.ts)
+to include this new product.
+```
+
+<Aside type="tip" title="Why this works">
+  Copilot extracts field names, types, and constraints directly from the PDF and maps them to the
+  existing Prisma schema in <code>services/product-service/prisma/schema.prisma</code> — no manual
+  transcription needed.
+</Aside>
+
+**What to look for:**
+
+- Copilot reading field names and types from the PDF (e.g. `frameSize: String`, `weightKg: Float`)
+- Generated migration consistent with the existing schema conventions
+- Seed entry that matches the spec values exactly
+
+## Follow-Up Prompts
+
+- _"The PDF has a pricing table on page 3 — generate the corresponding discount rules for the cart service."_
+- _"Here's a Figma export of the new checkout flow. What components in `services/frontend/src/` need to change?"_
+- _"Annotate the screenshot with the DOM elements Copilot identified as causing the overflow."_
