@@ -1,0 +1,73 @@
+---
+draft: false
+title: Copilot Spaces
+description: Curated, shareable context bundles that ground Copilot Chat in the knowledge you select.
+category: Demos
+order: 9
+capability: Contextual grounding
+duration: 2 min
+difficulty: Core
+icon: layers
+summary: Bundle repos, files, and docs into a Space to ground every Copilot answer.
+---
+
+## What This Demonstrates
+
+**Copilot Spaces** let you assemble a curated bundle of context — source files, docs, free text — and share it with your team so every Copilot Chat answer is grounded in the same knowledge. This demo creates a Space for the octo-eshop checkout flow, combining `order-service` and `cart-service` code so Copilot can answer deep architecture questions without hallucinating.
+
+## Prerequisites
+
+- GitHub Copilot Chat enabled in VS Code or github.com
+- Access to the `codecurrent-sandbox/octo-eshop-demo` repository
+- A Copilot Space created (or permission to create one) at github.com/copilot/spaces
+
+## Prompts
+
+### Prompt A — Checkout Flow Architecture
+
+```text
+Using the order-service and cart-service context in this Space, explain the
+end-to-end checkout flow: how does a cart item become a confirmed order?
+Include the sequence of HTTP calls, database writes, and any async events.
+```
+
+<Aside type="tip" title="Why this works">
+  The Space pins the exact files Copilot reads, so the answer reflects the actual `POST /orders`
+  handler in `order-service`, the Redis cart in `cart-service`, and the `order.created` Service Bus
+  event — not a generic e-commerce guess.
+</Aside>
+
+**What to look for:**
+
+- References to real route handlers (`services/order-service/src/routes/` and `services/cart-service/src/routes/`)
+- Mention of the `order.created` async event published to Azure Service Bus
+- The cart-clear step that follows successful order creation
+
+---
+
+### Prompt B — Shared Space for Onboarding
+
+```text
+I'm onboarding a new engineer to the checkout domain. Using this Space,
+generate a one-page architecture summary they can read in 5 minutes, covering:
+service boundaries, key API contracts, the database schema, and the main
+failure modes to watch for.
+```
+
+<Aside type="tip" title="Why this works">
+  Sharing this Space with the new hire means they chat with the same curated context you built — no
+  copy-pasting files, no stale wiki pages. The summary Copilot produces is always based on the live
+  code in the Space.
+</Aside>
+
+**What to look for:**
+
+- Service boundary diagram described in prose (cart owns Redis state; order owns Postgres)
+- `success/data/error/meta` API contract shape surfaced from the shared types
+- Failure modes like cart expiry, payment timeout, and idempotency on retry
+
+## Follow-Up Prompts
+
+- _"Add the `payment-service` source to this Space and re-explain what happens when a payment fails."_
+- _"Which files in this Space would need to change if we switched from Redis to Postgres for cart storage?"_
+- _"Generate an ADR capturing the decision to use Service Bus for order events."_
