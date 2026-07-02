@@ -101,6 +101,7 @@ octo-eshop-demo/
 | [Azure Architecture](docs/azure-architecture.md)                     | Infrastructure design, Azure services, network topology                                     |
 | [CI/CD Pipeline](docs/cicd-pipeline.md)                              | Workflows, deployment strategy, operational runbook                                         |
 | [Codespaces ↔ Azure via OpenVPN P2S](docs/dev-codespaces-openvpn.md) | Optional dev-only tunnel from a Codespace into private dev PostgreSQL via Azure VPN Gateway |
+| [Agentic Workflows](docs/agentic-workflows.md)                       | Copilot demo automation — architecture, the coding-agent approval gate, and gh-aw gotchas   |
 
 ## License
 
