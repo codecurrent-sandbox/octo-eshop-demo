@@ -105,11 +105,18 @@ Copilot coding agent**, so it must be detailed and self-contained. Use:
   - If `demo-site/src/components/home/DemoGrid.astro` hardcodes a demo count in its heading
     (e.g. "Eight demos"), update it to the new total.
   - Keep the change scoped to `demo-site/**` only.
+  - **Format every file you add or change with Prettier before finishing.** The repo's
+    `🧹 Lint & Format` CI job runs `prettier --check .`, and the whole test stage is gated behind
+    it (`needs: lint`) — a single unformatted file fails lint and causes every test job to be
+    skipped. From the repo root, run `npx prettier --write` on each path you touched (the new
+    `demo-site/src/content/docs/demos/NN-slug.mdx`, and `DemoGrid.astro` if you edited it), then
+    confirm with `npx prettier --check` on those paths.
   - **In the pull request description, include the line `Fixes #<this issue's number>`** so
     the PR is linked to this issue (the demo-review automation relies on that link to
     recognize the PR as an automated demo).
-  - **Acceptance criteria:** `cd demo-site && npm ci && npm run build` succeeds, and the new
-    demo shows up in the home grid and the left navigation.
+  - **Acceptance criteria:** `cd demo-site && npm ci && npm run build` succeeds, `npx prettier
+    --check` passes on every file you changed (so CI's Lint & Format job stays green and the
+    tests actually run), and the new demo shows up in the home grid and the left navigation.
   - Include the source changelog link: `<link>`, and a one-line summary of the feature.
 
 Write a genuinely useful, feature-specific brief — not a generic template restatement.
