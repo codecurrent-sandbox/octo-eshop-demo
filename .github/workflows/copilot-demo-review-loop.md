@@ -36,6 +36,11 @@ tools:
   edit: {}
 
 safe-outputs:
+  # Note: the compiled lock wires an OPTIONAL `GH_AW_CI_TRIGGER_TOKEN` secret into the push
+  # job (gh-aw's "extra empty commit" mechanism to trigger CI on pushed commits). We leave it
+  # UNSET on purpose — Copilot re-review after a fix push is handled by the branch ruleset's
+  # "Review new pushes", not by a workflow, so no CI-trigger token is required. If unset, gh-aw
+  # simply skips that step and pushes via GH_AW_GITHUB_TOKEN || GITHUB_TOKEN.
   push-to-pull-request-branch:
     target: "triggering"
     if-no-changes: "ignore"

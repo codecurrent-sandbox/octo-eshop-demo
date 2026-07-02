@@ -1,8 +1,10 @@
 name: Label automated demo PRs
 
-# Deterministically stamps the `automated-demo` label on pull requests whose linked/closing
-# issue was filed by the Copilot Demo Scout (label `demo-candidate`). The review-loop
-# workflow gates on that label, so this is what scopes the loop to demo PRs only.
+# Stamps the `automated-demo` label on pull requests whose linked/closing issue was filed by
+# the Copilot Demo Scout (label `demo-candidate`), giving demo PRs an early, human-visible tag.
+# NOTE: this label does NOT gate the review-loop. That workflow scopes itself at runtime from
+# the linked `demo-candidate` issue (this label is only a secondary signal), so this labeler is
+# non-load-bearing — if it never runs, the review-loop still works correctly.
 
 on:
   pull_request:
