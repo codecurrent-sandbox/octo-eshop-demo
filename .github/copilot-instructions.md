@@ -1,6 +1,6 @@
 # Copilot Instructions for Octo E-Shop
 
-> **This repository's canonical agent + contributor guide is [`/AGENTS.md`](../AGENTS.md).**
+> **This repository's canonical agent + contributor guide is [`/AGENTS.md`](/AGENTS.md).**
 > Read it first and treat it as authoritative. To avoid drift, this file is intentionally a
 > thin pointer — all project structure, build/run commands, conventions, code style, and the
 > development workflow (feature branches → independent multi-model `/review` → PR) live in
@@ -11,4 +11,4 @@
 and Helm.
 
 For anything not covered by a more specific instruction file, follow
-[`AGENTS.md`](../AGENTS.md).
+[`/AGENTS.md`](/AGENTS.md).

@@ -2,7 +2,8 @@
 
 Canonical, tool-agnostic guide for AI agents and human contributors working in this
 repository. It is the single source of truth for project structure, commands, conventions,
-code style, and the development workflow. (`/.github/copilot-instructions.md` points here.)
+code style, and the development workflow.
+([`/.github/copilot-instructions.md`](/.github/copilot-instructions.md) points here.)
 
 ## Project Overview
 
