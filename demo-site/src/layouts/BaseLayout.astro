@@ -55,6 +55,14 @@ const canonical = new URL(Astro.url.pathname, Astro.site ?? Astro.url).href;
         if (meta) meta.setAttribute('content', theme === 'light' ? '#ffffff' : '#0d1117');
       })();
     </script>
+
+    <!-- Cloudflare Web Analytics -->
+    <script
+      is:inline
+      defer
+      src="https://static.cloudflareinsights.com/beacon.min.js"
+      data-cf-beacon='{"token": "dcc5dfaa0dbf45f192ca295502d07b45"}'></script>
+    <!-- End Cloudflare Web Analytics -->
   </head>
   <body>
     <a class="skip-link" href="#main">Skip to content</a>
