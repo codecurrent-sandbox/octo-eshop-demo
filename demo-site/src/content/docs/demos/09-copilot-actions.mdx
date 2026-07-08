@@ -1,0 +1,190 @@
+---
+draft: false
+title: Copilot CLI in CI/CD
+description: Automate code analysis and maintenance tasks in GitHub Actions using Copilot CLI.
+category: Demos
+order: 9
+capability: Copilot CLI automation
+duration: 3 min
+difficulty: Intermediate
+icon: workflow
+summary: Run Copilot CLI in Actions workflows for automated code review, migration, and analysis.
+---
+
+## What This Demonstrates
+
+**GitHub Copilot CLI** can now run directly in GitHub Actions workflows using the built-in
+`GITHUB_TOKEN` — no personal access token required. This enables automated code analysis,
+refactoring suggestions, migration checks, and pre-merge validation — all powered by Copilot's
+agentic reasoning — without leaving your CI/CD pipeline.
+
+Eliminating the need for long-lived PATs reduces security risk and operational overhead, making
+it practical to add Copilot-powered steps to every pull request or push in the octo-eshop
+microservices platform.
+
+## Prerequisites
+
+- Repository with GitHub Actions enabled
+- Copilot CLI enabled in your organization/enterprise settings (Admin → Copilot → Policies)
+- A workflow file in `.github/workflows/`
+
+## Prompts
+
+### Prompt A — Automated Migration Check
+
+**Use case:** Before upgrading the Node.js runtime across all six services, run a pre-flight
+scan to identify blockers: incompatible engines fields, deprecated APIs, or Dockerfile base
+images still pinned to Node 18.
+
+```yaml
+name: Copilot CLI Migration Check
+on:
+  workflow_dispatch:
+
+jobs:
+  migration-check:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Copilot CLI
+        run: npm install -g @github/copilot
+      - name: Run migration readiness check
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          copilot "Check if all services in the services/ directory are ready to upgrade
+          from Node 18 to Node 20. Scan each service's package.json engines field and
+          Dockerfile base image. List any blockers and services that are already
+          compatible."
+```
+
+<Aside type="tip" title="Why this works">
+  Copilot CLI reads the actual `package.json` files and `Dockerfile`s in the monorepo and produces a
+  service-by-service compatibility matrix. Running this on a schedule or `workflow_dispatch` means
+  you get an up-to-date readiness report without a manual audit.
+</Aside>
+
+**What to look for:**
+
+- Per-service compatibility status (e.g., `user-service ✓`, `payment-service ✗ — engine: "node >=18 <20"`)
+- Dockerfiles still using `node:18-alpine` or similar
+- Any `process.binding()` or other deprecated Node.js API usage flagged
+
+---
+
+### Prompt B — Pre-Merge Analysis
+
+**Use case:** On every pull request that touches TypeScript in any service, run Copilot CLI
+to catch issues that static analysis alone may miss: business-logic errors, missing error
+handling around Prisma calls, and unvalidated Express inputs.
+
+```yaml
+name: Copilot CLI Pre-Merge Check
+on:
+  pull_request:
+    paths:
+      - 'services/**/*.ts'
+
+jobs:
+  copilot-review:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Copilot CLI
+        run: npm install -g @github/copilot
+      - name: Review changed files
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          CHANGED=$(git diff --name-only origin/${{ github.base_ref }}...HEAD \
+            -- 'services/**/*.ts' | head -20)
+          echo "Reviewing: $CHANGED"
+          copilot "Review these changed TypeScript files for missing error handling around
+          Prisma and Redis calls, unvalidated Express request inputs, and TypeScript
+          strictness violations (any types, missing return types). Files: $CHANGED"
+```
+
+<Aside type="tip" title="Why this works">
+  Scoping the review to the changed files keeps runtime short and output focused. The `GITHUB_TOKEN`
+  permission `pull-requests: write` allows a follow-up step to post findings as a PR comment, making
+  results visible directly in the review flow.
+</Aside>
+
+**What to look for:**
+
+- Prisma calls without `try/catch` or `.catch()` handlers
+- Express route handlers missing `req.body` validation
+- `any` type usage or missing return type annotations
+- Findings scoped only to the PR diff — no noise from unrelated files
+
+---
+
+### Prompt C — Dependency Audit
+
+**Use case:** Weekly, scan all six service `package.json` files for known vulnerabilities and
+license issues, then surface high and critical findings in the Actions log.
+
+```yaml
+name: Copilot CLI Dependency Audit
+on:
+  schedule:
+    - cron: '0 8 * * 1' # every Monday at 08:00 UTC
+  workflow_dispatch:
+
+jobs:
+  dependency-audit:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: Install Copilot CLI
+        run: npm install -g @github/copilot
+      - name: Audit dependencies
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          copilot "Scan the package.json files in services/user-service,
+          services/product-service, services/cart-service, services/order-service,
+          services/payment-service, and services/frontend for outdated dependencies with
+          known CVEs or restrictive licenses (GPL, AGPL). Report high and critical
+          findings grouped by service."
+```
+
+<Aside type="tip" title="Why this works">
+  Scheduling the audit weekly ensures findings are caught between dependency bumps, not just at PR
+  time. Copilot CLI cross-references installed versions against its training data on vulnerability
+  disclosures, producing actionable output without requiring a separate vulnerability database
+  subscription.
+</Aside>
+
+**What to look for:**
+
+- Findings grouped by service (e.g., `cart-service: express 4.18.0 — CVE-XXXX-XXXX`)
+- License flags for GPL-licensed transitive dependencies
+- A clean run producing "No high or critical findings" as the expected steady-state output
+
+## Follow-Up Prompts
+
+- _"Post the findings as a PR comment using the GitHub CLI (`gh pr comment`)."_
+- _"Fail the workflow with exit code 1 if Copilot CLI reports any critical findings."_
+- _"Generate a migration plan for the blockers identified in the Node 20 readiness check."_
