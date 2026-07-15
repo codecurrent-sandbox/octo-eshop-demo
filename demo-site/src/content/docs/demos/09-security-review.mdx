@@ -1,0 +1,69 @@
+---
+draft: false
+title: Security Review
+description: On-demand security scanning for in-flight code changes
+category: Demos
+order: 9
+capability: Security review
+duration: 2 min
+difficulty: Core
+icon: shield-check
+summary: Catch security vulnerabilities before code lands
+---
+
+## What This Demonstrates
+
+**`/security-review` in the Copilot app** analyzes your staged and unstaged changes for security vulnerabilities, including injection, XSS, insecure data handling, path traversal, and weak cryptography. Findings are prioritized with severity and confidence scores plus concrete fix guidance.
+
+## Prerequisites
+
+- Staged or unstaged changes open in the Copilot app
+- A change set touching security-sensitive code, for example `services/user-service/src/middleware/auth.ts`
+
+## Prompts
+
+### Prompt A — JWT Validation Bypass
+
+```text
+Run /security-review on my current changes to services/user-service/src/middleware/auth.ts.
+I think a recent edit may have introduced a JWT validation bypass in authentication middleware.
+Prioritize high-confidence findings and suggest concrete patch-level fixes.
+```
+
+<Aside type="tip" title="Catch issues before PR review">
+  `/security-review` gives a fast security gate while code is still in flight, so teams can fix
+  critical auth bugs before they ever reach pull request review.
+</Aside>
+
+**What to look for:**
+
+- Severity ratings (for example HIGH for auth bypass)
+- Confidence scores that separate likely true positives from noise
+- Actionable fix suggestions you can apply directly in the touched file
+
+---
+
+### Prompt B — Payment Input Sanitization (Optional)
+
+```text
+Run /security-review on my payment service changes in
+services/payment-service/src/controllers/paymentController.ts.
+Check for unsanitized API input and insecure data handling.
+```
+
+<Aside type="tip" title="Complements Code Scanning">
+  Use `/security-review` for immediate feedback on in-flight changes, then rely on GitHub Code
+  Scanning for broader repository-wide coverage in CI.
+</Aside>
+
+**What to look for:**
+
+- Injection and XSS risk signals in request handling paths
+- File/path validation findings that could indicate traversal risk
+- Prioritized remediation guidance with secure coding alternatives
+
+## Follow-Up Prompts
+
+- _"Now run `/security-review` on `services/product-service/src/repositories/productRepository.ts` and check for SQL injection risk in query construction."_
+- _"Summarize only HIGH and MEDIUM findings with exact code patches I should apply first."_
+- _"Which findings are likely false positives and why?"_
