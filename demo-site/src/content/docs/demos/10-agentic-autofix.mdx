@@ -1,0 +1,63 @@
+---
+draft: false
+title: Agentic Autofix
+description: Autonomous remediation of code scanning alerts with validation
+category: Demos
+order: 10
+capability: Code scanning autofix
+duration: 3 min
+difficulty: Advanced
+icon: wrench
+summary: Let Copilot explore, fix, and validate code scanning alerts end-to-end
+---
+
+## What This Demonstrates
+
+**Agentic autofix for code scanning** lets you assign an alert to Copilot with **Assign to Copilot**.
+Copilot explores relevant files, proposes a fix, reruns CodeQL to validate that the alert is closed,
+iterates if needed, and opens a draft PR with the fix and validation summary.
+
+## Prerequisites
+
+- A CodeQL code scanning alert in this repository
+  - Example: SQL injection in `services/product-service/src/repositories/productRepository.ts`
+  - Example: XSS in `services/frontend/src/components/UserProfile.tsx`
+  - Example: Path traversal in a file upload handler
+- GitHub code scanning enabled for the repository
+
+## Prompts
+
+### Prompt A — Assign SQL Injection Alert to Copilot
+
+```text
+Open the SQL injection alert in
+services/product-service/src/repositories/productRepository.ts and click
+"Assign to Copilot". Let Copilot generate and validate a fix.
+```
+
+<Aside type="tip" title="Why agentic autofix is robust">
+  Instead of a single pattern replacement, Copilot inspects related repository, service, and
+  call-site files to build a safe fix. It then reruns CodeQL and can iterate when the first attempt
+  does not fully close the alert.
+</Aside>
+
+**What to look for:**
+
+- Draft PR with a clear fix summary
+- CodeQL validation steps recorded in the PR timeline
+- Iteration log when the first fix attempt did not close the alert
+
+---
+
+### Prompt B (Optional) — Request Additional Hardening
+
+```text
+On the draft PR, add a comment requesting additional hardening:
+"Also add input validation at the controller layer for product search params."
+```
+
+<Aside type="tip" title="Beyond the first fix">
+  The PR comment loop lets you ask for defense-in-depth improvements after the alert is closed, such
+  as controller-layer validation, output encoding for XSS prevention, or safer path normalization in
+  upload flows.
+</Aside>
