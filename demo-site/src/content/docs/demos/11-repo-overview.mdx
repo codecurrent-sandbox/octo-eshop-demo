@@ -1,0 +1,65 @@
+---
+draft: false
+title: Repository Overview
+description: Get a high-level summary of any repository instantly
+category: Demos
+order: 11
+capability: Repository exploration
+duration: 1 min
+difficulty: Starter
+icon: map
+summary: Understand unfamiliar codebases in seconds
+---
+
+## What This Demonstrates
+
+From a repository home page, **GitHub Copilot** can generate a fast, high-level overview of what
+that project is, how it is structured, and which technologies it uses. This is ideal when you're
+exploring an unfamiliar codebase for the first time and need quick orientation.
+
+For this demo, use `codecurrent-sandbox/octo-eshop-demo` and expect Copilot to identify the
+microservices in `services/`, infrastructure-as-code in `infrastructure/`, and the Astro-based
+demo site in `demo-site/`.
+
+## Prerequisites
+
+- Open a repository home page in GitHub
+  - Example: `https://github.com/codecurrent-sandbox/octo-eshop-demo`
+  - Or any public repository you want to explore
+
+## Prompts
+
+### Prompt A — Repository Overview
+
+```text
+Give me an overview of this repository — what is it, how is it structured, and what tech stack does it use?
+```
+
+<Aside type="tip" title="Best time to use this">
+  Use this right when you join a new project or open an unfamiliar open-source repo. It gives you a
+  fast mental model before diving into individual files.
+</Aside>
+
+**What to look for:**
+
+- A concise summary of the repository's purpose
+- Correct tech stack identification
+- Key directories and what each one does
+- The high-level architecture pattern (for this repo: microservices)
+
+---
+
+### Prompt B — Follow-up Exploration (Optional)
+
+```text
+What are the main services in this microservices architecture?
+```
+
+```text
+Where is the authentication logic?
+```
+
+<Aside type="tip" title="Go deeper with targeted follow-ups">
+  After the overview, ask focused questions to quickly locate responsibilities, dependencies, and
+  ownership boundaries across the codebase.
+</Aside>
