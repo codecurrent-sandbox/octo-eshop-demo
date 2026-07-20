@@ -1,0 +1,103 @@
+---
+draft: false
+title: Copilot Desktop App
+description: Agent-driven development from the desktop using the GitHub Copilot app.
+category: Demos
+order: 9
+capability: Copilot Desktop App
+duration: 3 min
+difficulty: Starter
+icon: monitor
+summary: Standalone desktop app for agent-driven sessions across all your projects.
+---
+
+## What This Demonstrates
+
+The **GitHub Copilot app** is a standalone desktop application that brings agent-driven
+development to any local repository — independent of IDEs or the browser. Sign in with your
+GitHub account, point it at a local clone, and run full agent sessions with the same
+capabilities available in VS Code or GitHub.com.
+
+Available on **all Copilot plans** (Free, Pro, Business, Enterprise) and supports macOS,
+Windows, and Linux.
+
+## Prerequisites
+
+- GitHub Copilot app installed (download from [gh.io/copilot-app](https://gh.io/copilot-app))
+- Authenticated with your GitHub account
+- Local clone of the octo-eshop-demo repository
+
+## Prompts
+
+### Prompt A — Repository Overview
+
+```text
+Analyze the monorepo structure in the `services/` directory. Identify all microservices,
+their responsibilities, and recommend where a new discount-code service would best fit.
+Include which existing services it would need to communicate with and what API endpoints
+it should expose.
+```
+
+<Aside type="tip" title="Why this works">
+  The Copilot app reads the entire local repository tree, so it can reason about the actual service
+  layout — `user-service`, `product-service`, `cart-service`, `order-service`, and `payment-service`
+  — and give grounded architectural advice rather than generic patterns.
+</Aside>
+
+**What to look for:**
+
+- A specific recommendation on where the discount-code service fits in `services/`
+- Identification of which services (e.g., `cart-service`, `order-service`) would call it
+- Suggested API endpoint shapes consistent with the project's `success/data/error/meta` response format
+
+---
+
+### Prompt B — Implementation Task
+
+```text
+Add a health check endpoint to the user-service that returns service status and database
+connection info. The endpoint should live at GET /health and return JSON conforming to
+`{ success: boolean; data: { status, db, uptime } }`. Follow the existing project conventions in
+`services/user-service/src/`.
+```
+
+<Aside type="tip" title="Why this works">
+  By scoping the prompt to a specific service path, the app reads the actual controller, route, and
+  middleware files in `services/user-service/src/` and generates code that matches the existing
+  patterns — including the standard API response shape and Prisma client usage.
+</Aside>
+
+**What to look for:**
+
+- New route registered in `services/user-service/src/routes/`
+- Controller that queries Prisma to verify the database connection
+- Response conforming to `{ success: boolean; data: { status, db, uptime } }`
+- No changes outside the `user-service` directory
+
+---
+
+### Prompt C — Cross-Service Flow Analysis
+
+```text
+Trace the full order creation flow across microservices. Starting from when a user checks
+out in the cart-service, walk through how the order reaches order-service and then
+payment-service. Include the async events on Azure Service Bus.
+```
+
+<Aside type="tip" title="Why this works">
+  This prompt exercises the Copilot app's ability to reason across multiple services in a single
+  session. It reads `cart-service`, `order-service`, and `payment-service` together and connects the
+  synchronous HTTP calls with the async `order.created` and `order.paid` events.
+</Aside>
+
+**What to look for:**
+
+- Step-by-step trace from `cart-service` checkout → `order-service` creation → `payment-service` charge
+- Identification of the Azure Service Bus events (`order.created`, `order.paid`)
+- Any gaps or missing error-handling paths surfaced by the analysis
+
+## Follow-Up Prompts
+
+- _"Generate a Mermaid sequence diagram for the order creation flow you just traced."_
+- _"Add integration tests for the health check endpoint using the existing test setup in `services/user-service/tests/`."_
+- _"What would need to change in `order-service` to support order cancellation?"_
