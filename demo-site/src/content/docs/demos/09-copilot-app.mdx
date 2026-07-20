@@ -56,8 +56,8 @@ it should expose.
 
 ```text
 Add a health check endpoint to the user-service that returns service status and database
-connection info. The endpoint should live at GET /health and return JSON with `status`,
-`db`, and `uptime` fields. Follow the existing project conventions in
+connection info. The endpoint should live at GET /health and return JSON conforming to
+`{ success: boolean; data: { status, db, uptime } }`. Follow the existing project conventions in
 `services/user-service/src/`.
 ```
 
