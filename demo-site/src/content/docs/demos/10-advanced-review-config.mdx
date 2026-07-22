@@ -3,7 +3,7 @@ draft: false
 title: Advanced Review Configuration
 description: Customize Copilot code review with firewall, custom setup steps, and branch-specific instructions.
 category: Demos
-order: 11
+order: 10
 capability: Review customization
 duration: 4 min
 difficulty: Advanced
@@ -88,7 +88,7 @@ Before starting the review, run the setup steps defined in
    @octo-eshop/types and @octo-eshop/utils are resolvable.
 2. Start a Redis container (`docker run -d -p 6379:6379 redis:7-alpine`) for
    cart-service integration context.
-3. Seed the product catalog: `cd services/product-service && npx prisma db seed`
+3. Seed the product catalog: `docker-compose exec product-service npx prisma db seed`
    so review comments on catalog queries reference realistic data shapes.
 4. Compile the shared packages: `npm run build --workspace=shared/types
    --workspace=shared/utils` so TypeScript resolution is accurate.
@@ -118,6 +118,10 @@ Then review the PR with full awareness of the running environment.
 
 Restrict the review agent so it can only reach resources inside the cluster — preventing
 accidental code exfiltration through external HTTP calls during review.
+
+Before running this prompt, create `.github/copilot-review-firewall.yml` on your head
+branch with the policy content below, then commit and push it. The review agent reads the
+firewall config from the head branch, so the file must exist before the review runs.
 
 ```text
 Review this PR with the firewall policy defined in .github/copilot-review-firewall.yml
