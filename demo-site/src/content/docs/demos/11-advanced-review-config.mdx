@@ -1,0 +1,163 @@
+---
+draft: false
+title: Advanced Review Configuration
+description: Customize Copilot code review with firewall, custom setup steps, and branch-specific instructions.
+category: Demos
+order: 11
+capability: Review customization
+duration: 4 min
+difficulty: Advanced
+icon: settings-2
+summary: Configure custom review rules, firewall, and setup steps.
+---
+
+## What This Demonstrates
+
+**Advanced Copilot code review customization** lets you tailor exactly how the review agent
+runs on your pull requests — going well beyond the default prompt.
+
+- **Custom instructions from the head branch** — place review rules in
+  `.github/copilot-instructions.md` on the feature branch so you can test and iterate on
+  instructions before merging them to `main`.
+- **Custom setup steps** — configure `.github/copilot-setup-steps.yml` to install
+  dependencies, seed product catalog data, and start a test Redis instance before the review
+  agent runs.
+- **Firewall configuration** — restrict the review agent's network access so it can only
+  reach internal Kubernetes DNS and your private container registry — no external API calls
+  that could leak code.
+- **Independent runner configuration** — dedicate a self-hosted runner (or larger GitHub-
+  hosted runner) to review jobs without affecting your regular CI pool.
+
+## Prerequisites
+
+- GitHub web UI or VS Code with a PR checked out
+- A feature branch with changes to review
+- Admin access to configure `.github/` settings (for the setup steps and firewall demos)
+
+## Prompts
+
+### Prompt A — Custom Review Instructions
+
+Add a `.github/copilot-instructions.md` file on the feature branch (or update the one on
+`main`) so Copilot enforces project-specific rules on every review.
+
+```text
+Review this PR using the custom instructions in .github/copilot-instructions.md.
+
+In particular:
+- Every cart-service change must include Redis TTL validation (keys must expire; no
+  indefinite TTLs are allowed).
+- Every payment-service change must include a PCI-DSS compliance check: no raw card data
+  in logs, all amounts in minor units (pence/cents), and audit events emitted to the
+  order.paid Service Bus topic.
+- All API responses must conform to the { success, data, error, meta } shape defined in
+  @octo-eshop/types.
+- Prisma migration files under services/*/prisma/migrations/ must follow the naming
+  convention YYYYMMDDHHMMSS_<snake_case_description>.
+```
+
+<Aside type="tip" title="Why this works">
+  Copilot reads `.github/copilot-instructions.md` from the **head branch** of the PR, so you can
+  draft, test, and refine your review rules on a feature branch before they land on `main`. Changes
+  take effect immediately on the next review — no deployment needed.
+</Aside>
+
+**What to look for:**
+
+- Redis TTL enforcement flagged for any `redis.set` or `redis.hset` call without an `EX`
+  or `PX` option in `services/cart-service/`
+- PCI-DSS findings on `services/payment-service/` — raw card numbers in log statements,
+  amounts stored as floats instead of integers
+- API response shape violations (`res.json({ message: ... })` instead of the standard
+  `{ success, data, error }` envelope)
+- Migration file name rejections for files that don't match the timestamp convention
+
+---
+
+### Prompt B — Custom Setup Steps
+
+Configure `.github/copilot-setup-steps.yml` so the review agent has a fully seeded
+environment — real product data, a running Redis instance, and all workspace dependencies
+installed — before it inspects the code.
+
+```text
+Before starting the review, run the setup steps defined in
+.github/copilot-setup-steps.yml to prepare the environment:
+
+1. Install all monorepo dependencies with `npm ci` from the repo root so
+   @octo-eshop/types and @octo-eshop/utils are resolvable.
+2. Start a Redis container (`docker run -d -p 6379:6379 redis:7-alpine`) for
+   cart-service integration context.
+3. Seed the product catalog: `cd services/product-service && npx prisma db seed`
+   so review comments on catalog queries reference realistic data shapes.
+4. Compile the shared packages: `npm run build --workspace=shared/types
+   --workspace=shared/utils` so TypeScript resolution is accurate.
+
+Then review the PR with full awareness of the running environment.
+```
+
+<Aside type="tip" title="Why this works">
+  Setup steps run once per review job in the same isolated environment as the agent. Installing
+  dependencies and seeding data means Copilot can resolve imports, verify Prisma query shapes
+  against the actual schema, and check Redis key patterns against a live instance — catching errors
+  that a static-only review would miss.
+</Aside>
+
+**What to look for:**
+
+- TypeScript import errors caught because `@octo-eshop/types` is actually built and
+  resolvable (not just assumed present)
+- Prisma query shape mismatches against the seeded `product-service` schema
+- Redis key naming or TTL issues validated against the live Redis instance started in
+  setup
+- The review job timeline showing the setup phase completing before analysis begins
+
+---
+
+### Prompt C — Firewall Configuration
+
+Restrict the review agent so it can only reach resources inside the cluster — preventing
+accidental code exfiltration through external HTTP calls during review.
+
+```text
+Review this PR with the firewall policy defined in .github/copilot-review-firewall.yml
+applied. The policy should:
+
+- Allow outbound traffic only to:
+    - Internal Kubernetes DNS (*.octo-eshop-dev.svc.cluster.local)
+    - GitHub API (api.github.com) for PR metadata
+    - Your private Azure Container Registry (octoeshopacr.azurecr.io)
+- Block all other outbound HTTP/HTTPS traffic, including npm registry, external
+  documentation sites, and any third-party APIs.
+
+Confirm the review completes successfully under these network constraints and flag any
+code paths that make external HTTP calls at review time (e.g., hardcoded external URLs
+in service configuration, missing environment variable indirection for API base URLs).
+```
+
+<Aside type="tip" title="Why this works">
+  Firewall integration closes the supply-chain gap: the review agent can read your code but cannot
+  exfiltrate it to an external endpoint. It also double-checks that your services don't hardcode
+  external URLs — a common misconfiguration that breaks when the cluster network policy is applied
+  in production.
+</Aside>
+
+**What to look for:**
+
+- Review completes without network errors (confirming only the allowed endpoints were
+  needed)
+- Hardcoded external URLs flagged in `services/*/src/` — e.g., `https://api.stripe.com`
+  that should be read from `process.env.PAYMENT_GATEWAY_URL`
+- Missing Kubernetes-internal URL patterns for inter-service calls (should use
+  `http://product-service` not `http://localhost:3002`)
+- Any `fetch` or `axios` calls that bypass the environment variable pattern defined in
+  the project conventions
+
+## Follow-Up Prompts
+
+- _"Generate the `.github/copilot-setup-steps.yml` file that installs dependencies, seeds
+  the product catalog, and starts Redis — ready to commit."_
+- _"Update `.github/copilot-instructions.md` to also enforce that all Helm chart
+  `values-prod.yaml` files set `resources.limits` for every container."_
+- _"Show me which of these firewall rules would need to change if we moved from Azure
+  Service Bus to a self-hosted RabbitMQ instance inside the cluster."_
