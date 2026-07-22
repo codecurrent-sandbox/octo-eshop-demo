@@ -1,0 +1,132 @@
+---
+draft: false
+title: Agentic Autofix
+description: Automatically fix code scanning alerts by assigning them to Copilot.
+category: Demos
+order: 12
+capability: Automated security fixes
+duration: 4 min
+difficulty: Advanced
+icon: shield-alert
+summary: Assign security alerts to Copilot for automatic remediation.
+---
+
+## What This Demonstrates
+
+**Agentic autofix** lets you assign code scanning alerts — from CodeQL or third-party tools — to
+Copilot so it can analyze the vulnerability, fix it across the codebase, validate the remediation,
+and open a pull request for review.
+
+In this repo, that means Copilot can trace a finding from the alert to the affected service,
+update the right files, run builds or tests, and open a PR in about 2–4 minutes with a summary of
+the fix, why it closes the alert, and the validation steps it ran. You can assign a single alert
+for a focused patch or batch related alerts together for one consolidated fix PR.
+
+The review flow stays human-in-the-loop: Copilot opens the PR, a maintainer reviews the patch,
+then merges it or requests follow-up changes in PR comments.
+
+## Prerequisites
+
+- Code scanning enabled with CodeQL or a supported third-party scanner
+- At least one code scanning alert in the repository
+- GitHub Code Security or GitHub Advanced Security licensing
+- A Copilot license with the cloud agent enabled
+
+## Prompts
+
+### Prompt A — Single Alert Fix
+
+```text
+Open a code scanning alert for the product catalog or auth flow and assign it to
+Copilot.
+
+Examples in this repo:
+- SQL injection-style query construction in
+  `services/product-service/src/repositories/productRepository.ts`
+- A hardcoded secret or API key in `services/payment-service/src/config/index.ts`
+- JWT validation bypass risk in `services/user-service/src/middleware/auth.ts`
+
+From the GitHub UI, click "Assign to Copilot", or use the REST API with:
+`assignees: ["copilot-swe-agent[bot]"]`
+```
+
+<Aside type="tip" title="Why this works">
+  Start with a single alert when you want a tight before/after demo. Copilot can stay focused on one
+  vulnerability, explain the root cause clearly, and show a small PR that is easy for the team to
+  review live.
+</Aside>
+
+**What to look for:**
+
+- A PR summary that clearly explains the vulnerable path and the remediation
+- Validation steps showing Copilot ran relevant tests or builds before opening the PR
+- Cross-file fixes when the alert touches shared helpers, middleware, or config
+- A closing explanation that shows why the alert should no longer fire
+
+---
+
+### Prompt B — Batch Fix
+
+```text
+In Security → Code scanning alerts, select multiple related findings and assign
+them to Copilot for one fix PR.
+
+Example batch for this repo:
+- Group SQL injection alerts tied to search/filter handling across
+  `services/product-service/src/repositories/productRepository.ts`
+- Include any related auth or authorization findings in
+  `services/order-service/src/middleware/auth.ts` if they stem from the same
+  request flow
+
+Ask Copilot to consolidate the fixes into a single PR and validate the updated
+services before opening it.
+```
+
+<Aside type="tip" title="Why this works">
+  Batch remediation is strongest when the findings share a root cause. Instead of opening several
+  tiny PRs, Copilot can normalize the fix pattern across services and show one coherent validation
+  story.
+</Aside>
+
+**What to look for:**
+
+- Consistent remediation patterns across every touched service
+- A single PR that explains which alerts were grouped together and why
+- Validation covering each affected area, not just the first file changed
+- Minimal, reviewable diffs instead of broad unrelated refactors
+
+---
+
+### Prompt C — Campaign Fix
+
+```text
+Inside a security campaign, select the remaining high-priority alerts for the
+checkout path and assign them to Copilot for batch remediation.
+
+Good candidates in this repo include:
+- Missing authorization checks in `order-service`
+- Hardcoded secret handling in `payment-service`
+- Alert clusters related to request validation or token handling
+
+Have Copilot open one PR, then review it as a team before merging or requesting
+follow-up changes in PR comments.
+```
+
+<Aside type="tip" title="Why this works">
+  Security campaigns are useful when you want to tell a broader remediation story: identify a theme
+  such as checkout security, let Copilot handle the repetitive patching work, then keep humans
+  focused on approval and edge cases.
+</Aside>
+
+**What to look for:**
+
+- Copilot mapping each campaign alert to concrete repo files and services
+- Evidence that it checked builds, tests, and the alert status after patching
+- Review-ready notes that explain why the PR should close the selected alerts
+- Clear human hand-off: review, merge, or request changes with PR feedback
+
+## Follow-Up Prompts
+
+- _"Show me the validation steps Copilot ran before opening the fix PR."_
+- _"Refine the fix so it also covers edge cases in the checkout authorization flow."_
+- _"Explain which files changed to make sure the alert no longer fires across the codebase."_
