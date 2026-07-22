@@ -1,0 +1,99 @@
+---
+draft: false
+title: Security Review
+description: Run security-focused code reviews using /security-review in the Copilot app.
+category: Demos
+order: 10
+capability: Security review
+duration: 3 min
+difficulty: Core
+icon: shield-check
+summary: Scan code for security vulnerabilities using Copilot app.
+---
+
+## What This Demonstrates
+
+The **`/security-review`** command in the **GitHub Copilot app** runs a security-focused review
+over your in-progress code and looks specifically for vulnerabilities such as injection flaws,
+authentication and authorization mistakes, insecure token handling, crypto misuse, secret
+exposure, and risky data flows.
+
+Unlike a general code review, `/security-review` stays tightly focused on exploitability and
+abuse paths — helping you find the changes that could lead to account takeover, payment abuse, or
+data leakage in an e-commerce microservices codebase.
+
+## Prerequisites
+
+- GitHub Copilot app installed
+- Working directory opened in this `octo-eshop-demo` repository
+- Code changes staged or in-progress
+
+## Prompts
+
+### Prompt A — Full Security Scan
+
+```text
+/security-review Review all staged changes across the e-commerce services, especially
+`services/user-service/`, `services/payment-service/`, `services/cart-service/`, and any
+related `services/order-service/` files. Focus on exploitable security issues such as JWT
+validation mistakes in `services/user-service/src/middleware/auth.ts`, refresh-token
+handling in `services/user-service/src/services/userService.ts`, payment data exposure in
+`services/payment-service/src/controllers/paymentController.ts`, auth bypass in
+`services/order-service/src/routes/orderRoutes.ts`, cart manipulation in
+`services/cart-service/src/routes/cartRoutes.ts`, and injection risks in product query
+logic like `services/product-service/src/repositories/productRepository.ts`. Prioritize
+findings by severity and suggest concrete fixes.
+```
+
+<Aside type="tip" title="Why this works">
+  This prompt gives Copilot a clear security mission plus concrete files and attack surfaces. The
+  app can inspect the staged diff, connect related services, and look for realistic e-commerce abuse
+  paths instead of returning a generic checklist.
+</Aside>
+
+**What to look for:**
+
+- Severity-ranked findings with exploit-focused explanations
+- JWT, session, or refresh-token handling weaknesses in `user-service`
+- Payment or refund endpoints that could leak data or allow unsafe access in `payment-service`
+- Missing auth/ownership checks in `order-service` or `cart-service`
+- Injection or untrusted-input risks in repository and controller code
+
+---
+
+### Prompt B — Targeted Security Review
+
+```text
+/security-review Focus only on authentication and authorization logic in
+`services/user-service/`. Review `services/user-service/src/middleware/auth.ts`,
+`services/user-service/src/utils/jwt.ts`, `services/user-service/src/services/userService.ts`,
+and `services/user-service/src/controllers/userController.ts` for JWT verification bugs,
+weak refresh-token rotation, password hashing mistakes, privilege escalation, broken logout,
+and any way a user could bypass auth or replay tokens. Suggest patch-level fixes for each
+confirmed issue.
+```
+
+<Aside type="tip" title="Why this works">
+  Narrowing the review to authentication code increases signal. Copilot can spend its effort on
+  token verification, session invalidation, password hashing, and refresh flows instead of scanning
+  unrelated business logic.
+</Aside>
+
+**What to look for:**
+
+- Incorrect JWT validation, expiry handling, or trust boundaries
+- Refresh-token storage, rotation, and replay issues
+- Password hashing and credential-validation weaknesses
+- Missing authorization checks that could expose another user's profile or session
+
+## Follow-Up Prompts
+
+- _"Run `/security-review` again, but only on
+  `services/payment-service/src/routes/paymentRoutes.ts` and
+  `services/payment-service/src/controllers/paymentController.ts` to look for privilege or
+  data-exposure issues in the refund flow."_
+- _"Use `/security-review` on recent `services/cart-service/` changes and flag any cart tampering,
+  insecure price trust, or path that lets one user modify another user's cart."_
+- _"Use `/security-review` to compare `services/order-service/src/routes/orderRoutes.ts` with
+  `services/user-service/src/middleware/auth.ts` and tell me the top 3 security fixes I should
+  make before merging this e-commerce change."_
