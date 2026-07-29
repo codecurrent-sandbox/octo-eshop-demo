@@ -1,0 +1,88 @@
+---
+draft: false
+title: Agent Automation Controls
+description: Review and approve agent-driven issue updates with clear reasoning in GitHub Issues.
+category: Demos
+order: 11
+capability: Issue Management
+duration: 2 min
+difficulty: Core
+icon: settings-2
+summary: Keep humans in control while GitHub agents suggest issue changes.
+---
+
+## What This Demonstrates
+
+GitHub Issues can now show _why_ an agent suggests changes like labels, issue type, assignee, or
+status/closure. You can review each suggestion before it applies, accept or reject it, and keep a
+history of what was approved or declined.
+
+## Prerequisites
+
+- A repository with Issues enabled
+- Access to create issues in `codecurrent-sandbox/octo-eshop-demo`
+- (Optional) Existing issue automation rules or agent-driven triage enabled
+
+## Prompts
+
+### Prompt A — Trigger Auto-Labeling
+
+```text
+Create an issue for adding Stripe payment integration to payment-service. Include API changes using the standard success/data/error/meta response format, required Helm values for deployment to Azure AKS, and Terraform updates for Key Vault secrets.
+```
+
+<Aside type="tip" title="Why this works">
+  This prompt includes clear payment and infrastructure scope (`payment-service`, AKS, Helm,
+  Terraform, Key Vault), which often triggers label suggestions such as `enhancement`, `payments`,
+  or `infrastructure`.
+</Aside>
+
+**What to look for:**
+
+- Suggested labels with an explanation of why each label is proposed
+- Review controls to accept or reject each suggested change
+- An activity/history trail showing accepted or rejected agent actions
+
+---
+
+### Prompt B — Trigger Assignment Suggestions
+
+```text
+Create an issue to refactor the cart-service Redis client for better retry handling and timeout behavior. Include impact on checkout performance, Redis connection pooling, and any required Helm and AKS runtime configuration updates.
+```
+
+<Aside type="tip" title="Why this works">
+  The prompt is ownership-specific (`cart-service`, Redis, runtime ops). Agent triage can suggest
+  assignment to the team or maintainer who usually handles cart reliability and platform config.
+</Aside>
+
+**What to look for:**
+
+- Suggested assignee(s) with transparent rationale
+- Ability to approve/reject assignment before it is applied
+- Evidence that manual control is preserved even when automation suggests owners
+
+---
+
+### Prompt C — Trigger Type/Status Automation
+
+```text
+Create a bug issue: checkout fails in order-service when user-service JWT refresh expires during order confirmation, returning inconsistent error payloads instead of success/data/error/meta. Include PostgreSQL transaction context and cross-service impact.
+```
+
+<Aside type="tip" title="Why this works">
+  This is a concrete defect report spanning `order-service` and `user-service` with API contract
+  mismatch details, which is a strong signal for `bug` typing and priority/status suggestions.
+</Aside>
+
+**What to look for:**
+
+- Suggested issue type/status (for example `bug` or urgent triage state) with reasons
+- Review-before-apply controls for type/status updates
+- Logged record of which automation suggestions were accepted vs rejected
+
+## Follow-Up Prompts
+
+- _"Explain why each suggested issue change was proposed in plain language."_
+- _"Apply only labeling suggestions and reject assignment/type changes for now."_
+- _"Show me the history of accepted and rejected agent-driven issue actions on this item."_
